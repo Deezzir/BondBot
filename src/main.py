@@ -33,7 +33,7 @@ async def command_run_bonds_handler(message: Message) -> None:
         )
         return
 
-    asyncio.create_task(SCRAPPER.start())
+    asyncio.create_task(SCRAPPER.start(message.chat.id))
 
 
 @DISPATCHER.message(Command("stopbonds"))
@@ -48,7 +48,7 @@ async def command_stop_bonds_handler(message: Message) -> None:
         )
         return
 
-    await SCRAPPER.stop()
+    await SCRAPPER.stop(message.chat.id)
 
 
 async def main() -> None:

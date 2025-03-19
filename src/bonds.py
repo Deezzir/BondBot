@@ -44,36 +44,34 @@ class BondScrapper:
         self.bot = bot
         self.chat_id = chat_id
 
-    async def start(self) -> None:
+    async def start(self, chat_id: int) -> None:
         """Start the Bond Scrapper."""
         if self.task:
-            await self.bot.send_message(self.chat_id, "Bond Scrapper already running.")
+            await self.bot.send_message(chat_id, "Bond Scrapper already running.")
             return
 
-        try:
-            await self.bot.send_message(self.chat_id, "Starting Bond Scrapper...")
-            task = asyncio.create_task(self._subscribe_bonds())
-            self.task = task
-            await task
-        except asyncio.CancelledError:
-            LOGGER.info("Bond Task was cancelled.")
+        await self.bot.send_message(chat_id, "Starting Bond Scrapper...")
+        task = asyncio.create_task(self._subscribe_bonds())
+        self.task = task
+        await task
 
-    async def stop(self) -> None:
+    async def stop(self, chat_id: int) -> None:
         """Stop the Bond Scrapper."""
         if self.task:
-            await self.bot.send_message(self.chat_id, "Stopping Bond Scrapper...")
+            await self.bot.send_message(chat_id, "Stopping Bond Scrapper...")
             self.task.cancel()
 
             try:
                 await self.task
             except asyncio.CancelledError:
-                LOGGER.info("Bond Task was successfully cancelled.")
+                pass
             finally:
+                LOGGER.info("Bond Task was successfully cancelled.")
                 self.task = None
         else:
             if not self.chat_id:
                 return
-            await self.bot.send_message(self.chat_id, "Bond Scrapper is not running.")
+            await self.bot.send_message(chat_id, "Bond Scrapper is not running.")
 
     def _compress_dev_link(self, dev: str) -> str:
         """Compress the dev wallet link."""
@@ -224,10 +222,10 @@ class BondScrapper:
         done = False
 
         while not done:
-            try:
-                async with ws_connect(
-                    f"wss://{self.rpc}", ping_interval=60, ping_timeout=120
-                ) as websocket:
+            async with ws_connect(
+                f"wss://{self.rpc}", ping_interval=60, ping_timeout=120
+            ) as websocket:
+                try:
                     await websocket.logs_subscribe(
                         RpcTransactionLogsFilterMentions(PUMP_MIGRATION_ADDRESS),
                         Commitment("confirmed"),
@@ -244,25 +242,17 @@ class BondScrapper:
                                 asset_info = await self._get_asset_info(mint)
                                 if asset_info:
                                     await self._post_new_bond(asset_info)
-                        except asyncio.CancelledError:
-                            LOGGER.info("Process interrupted by user. Cleaning up...")
-                            done = True
-                            break
                         except Exception as e:
                             LOGGER.error(f"Error processing a log: {e}")
-            except asyncio.CancelledError:
-                done = True
-            except Exception as e:
-                LOGGER.error(f"Error with the WebSocket connection: {e}")
-            finally:
-                if sub_id:
-                    await websocket.logs_unsubscribe(sub_id)
-                await asyncio.sleep(10)
-
-        if self.task:
-            self.task.cancel()
-            self.task = None
-        LOGGER.info("Task cancelled and resources cleaned up.")
+                except asyncio.CancelledError:
+                    LOGGER.info("The task was canceled. Cleaning up...")
+                    done = True
+                    break
+                except Exception as e:
+                    LOGGER.error(f"Error with the WebSocket connection: {e}")
+                finally:
+                    if websocket.open and sub_id:
+                        await websocket.logs_unsubscribe(sub_id)
 
     def _sort_holders(self, top_holders: List[Holder]) -> List[Holder]:
         return sorted(top_holders, key=lambda x: x.allocation, reverse=True)
