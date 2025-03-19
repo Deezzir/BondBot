@@ -95,11 +95,14 @@ class PumpCoin:
     username: Optional[str]
     profile_image: Optional[str]
     usd_market_cap: float
-    
+
     @classmethod
     def from_dict(cls, data: dict) -> "PumpCoin":
+        """Create a PumpCoin object from a dictionary."""
         field_names = {field.name for field in fields(cls)}
-        filtered_data = {key: value for key, value in data.items() if key in field_names}
+        filtered_data = {
+            key: value for key, value in data.items() if key in field_names
+        }
         return cls(**filtered_data)
 
 
@@ -134,6 +137,7 @@ async def send_photo(
             attempts += 1
             await asyncio.sleep(1)
     return None
+
 
 async def fetch_pump_coin(mint: str) -> Optional[PumpCoin]:
     """Fetch the metadata of a pump coin from the Pump API."""

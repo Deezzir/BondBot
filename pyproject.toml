@@ -29,7 +29,7 @@ no_namespace_packages = true
 exclude = ['.git', '.tox', '.venv']
 
 [tool.flake8]
-max-line-length = 88
+max-line-length = 99
 exclude = [
     ".git",
     "__pycache__",

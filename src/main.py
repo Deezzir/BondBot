@@ -10,7 +10,7 @@ from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.filters import Command
-from aiogram.types import ChatMemberAdministrator, Message
+from aiogram.types import Message
 
 from bonds import BondScrapper
 from constants import ADMIN_ID, BOT_TOKEN, MAIN_GROUP_ID

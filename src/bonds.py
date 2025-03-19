@@ -15,13 +15,12 @@ from solders.rpc.config import RpcTransactionLogsFilterMentions
 from solders.rpc.responses import GetTransactionResp
 from solders.signature import Signature
 from solders.transaction_status import (
+    ParsedAccount,
     UiPartiallyDecodedInstruction,
     UiTransaction,
-    ParsedAccount,
 )
-from websockets import Data
 
-from constants import PUMP_MIGRATION_ADDRESS, RPC, TEST_RAW_TX
+from constants import PUMP_MIGRATION_ADDRESS, RPC
 from utils import (
     AssetData,
     Holder,
@@ -202,10 +201,7 @@ class BondScrapper:
         if not self.task:
             return None
 
-        if (
-            any(log for log in raw_tx.logs if "Withdraw" in log)
-            and not raw_tx.err
-        ):
+        if any(log for log in raw_tx.logs if "Withdraw" in log) and not raw_tx.err:
             tx = await self._get_tx_details(raw_tx.signature)
             if not tx:
                 return None
@@ -237,7 +233,7 @@ class BondScrapper:
             while not done:
                 async for log in websocket:
                     try:
-                        mint = await self._process_log(log[0].result.value) # type: ignore
+                        mint = await self._process_log(log[0].result.value)  # type: ignore
                         if mint:
                             LOGGER.info(f"Found new bond: {str(mint)}")
                             asset_info = await self._get_asset_info(mint)
@@ -254,7 +250,6 @@ class BondScrapper:
                 self.task.cancel()
                 self.task = None
             LOGGER.info("Task cancelled and resources cleaned up.")
-
 
     def _sort_holders(self, top_holders: List[Holder]) -> List[Holder]:
         return sorted(top_holders, key=lambda x: x.allocation, reverse=True)
