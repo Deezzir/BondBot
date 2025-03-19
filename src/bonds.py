@@ -50,10 +50,13 @@ class BondScrapper:
             await self.bot.send_message(self.chat_id, "Bond Scrapper already running.")
             return
 
-        await self.bot.send_message(self.chat_id, "Starting Bond Scrapper...")
-        task = asyncio.create_task(self._subscribe_bonds())
-        self.task = task
-        await task
+        try:
+            await self.bot.send_message(self.chat_id, "Starting Bond Scrapper...")
+            task = asyncio.create_task(self._subscribe_bonds())
+            self.task = task
+            await task
+        except asyncio.CancelledError:
+            LOGGER.info("Bond Task was cancelled.")
 
     async def stop(self) -> None:
         """Stop the Bond Scrapper."""
@@ -218,38 +221,48 @@ class BondScrapper:
             return
 
         sub_id: int
-        async with ws_connect(
-            f"wss://{self.rpc}", ping_interval=60, ping_timeout=120
-        ) as websocket:
-            await websocket.logs_subscribe(
-                RpcTransactionLogsFilterMentions(PUMP_MIGRATION_ADDRESS),
-                Commitment("confirmed"),
-            )
-            LOGGER.info("Subscribed to logs. Waiting for messages...")
-            first_resp = await websocket.recv()
-            sub_id = first_resp[0].result  # type: ignore
-            done = False
+        done = False
 
-            while not done:
-                async for log in websocket:
-                    try:
-                        mint = await self._process_log(log[0].result.value)  # type: ignore
-                        if mint:
-                            LOGGER.info(f"Found new bond: {str(mint)}")
-                            asset_info = await self._get_asset_info(mint)
-                            if asset_info:
-                                await self._post_new_bond(asset_info)
-                    except KeyboardInterrupt:
-                        LOGGER.info("Process interrupted by user. Cleaning up...")
-                        done = True
-                    except Exception as e:
-                        LOGGER.error(f"Error processing a log: {e}")
-            if sub_id:
-                await websocket.logs_unsubscribe(sub_id)
-            if self.task:
-                self.task.cancel()
-                self.task = None
-            LOGGER.info("Task cancelled and resources cleaned up.")
+        while not done:
+            try:
+                async with ws_connect(
+                    f"wss://{self.rpc}", ping_interval=60, ping_timeout=120
+                ) as websocket:
+                    await websocket.logs_subscribe(
+                        RpcTransactionLogsFilterMentions(PUMP_MIGRATION_ADDRESS),
+                        Commitment("confirmed"),
+                    )
+                    LOGGER.info("Subscribed to logs. Waiting for messages...")
+                    first_resp = await websocket.recv()
+                    sub_id = first_resp[0].result  # type: ignore
+
+                    async for log in websocket:
+                        try:
+                            mint = await self._process_log(log[0].result.value)  # type: ignore
+                            if mint:
+                                LOGGER.info(f"Found new bond: {str(mint)}")
+                                asset_info = await self._get_asset_info(mint)
+                                if asset_info:
+                                    await self._post_new_bond(asset_info)
+                        except asyncio.CancelledError:
+                            LOGGER.info("Process interrupted by user. Cleaning up...")
+                            done = True
+                            break
+                        except Exception as e:
+                            LOGGER.error(f"Error processing a log: {e}")
+            except asyncio.CancelledError:
+                done = True
+            except Exception as e:
+                LOGGER.error(f"Error with the WebSocket connection: {e}")
+            finally:
+                if sub_id:
+                    await websocket.logs_unsubscribe(sub_id)
+                await asyncio.sleep(10)
+
+        if self.task:
+            self.task.cancel()
+            self.task = None
+        LOGGER.info("Task cancelled and resources cleaned up.")
 
     def _sort_holders(self, top_holders: List[Holder]) -> List[Holder]:
         return sorted(top_holders, key=lambda x: x.allocation, reverse=True)
