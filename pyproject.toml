@@ -1,0 +1,38 @@
+[tool.black]
+line-length = 88
+target-version = ['py39']
+exclude = '''
+/(
+    | .git
+    | .tox
+    | .venv
+)/
+'''
+
+[tool.isort]
+profile = "black"
+line_length = 99
+skip_glob = [".git", ".tox", ".venv"]
+
+[tool.pylint]
+max-line-length = 99
+disable = ["C0114", "C0115", "C0116"]
+ignore = ['.git', '.tox', '.venv']
+
+[tool.mypy]
+warn_unused_ignores = true
+warn_unused_configs = true
+warn_unreachable = true
+disallow_untyped_defs = true
+ignore_missing_imports = true
+no_namespace_packages = true
+exclude = ['.git', '.tox', '.venv']
+
+[tool.flake8]
+max-line-length = 88
+exclude = [
+    ".git",
+    "__pycache__",
+    ".tox",
+    ".venv",
+]

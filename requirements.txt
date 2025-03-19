@@ -1,0 +1,5 @@
+aiogram
+asyncio
+python-dotenv
+solders
+solana
