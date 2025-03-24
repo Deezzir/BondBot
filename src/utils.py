@@ -91,9 +91,6 @@ class PumpCoin:
     website: Optional[str]
     market_cap: float
     market_id: str
-    inverted: bool
-    username: Optional[str]
-    profile_image: Optional[str]
     usd_market_cap: float
 
     @classmethod

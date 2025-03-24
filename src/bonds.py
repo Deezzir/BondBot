@@ -2,7 +2,7 @@
 
 import asyncio
 import logging
-from typing import Any, List, Optional
+from typing import Any, List, Optional, cast
 
 from aiogram import Bot
 from aiogram.enums import ParseMode
@@ -180,7 +180,7 @@ class BondScrapper:
             try:
                 while attempt < 10:
                     tx_raw = await client.get_transaction(
-                        sig, "jsonParsed", Commitment("confirmed"), 0
+                        sig, "jsonParsed", Commitment("confirmed")
                     )
                     if tx_raw != GetTransactionResp(None):
                         break
@@ -202,12 +202,12 @@ class BondScrapper:
         if not self.task:
             return None
 
-        if any(log for log in raw_tx.logs if "Withdraw" in log) and not raw_tx.err:
+        if any(log for log in raw_tx.logs if "Migrate" in log) and not raw_tx.err:
             tx = await self._get_tx_details(raw_tx.signature)
             if not tx:
                 return None
             LOGGER.info(f"Found the initilize new pool tx: {raw_tx.signature}")
-            mint = tx.message.account_keys[10]
+            mint = tx.message.account_keys[24]
             if type(mint) is Pubkey:
                 return mint
             elif type(mint) is ParsedAccount:
