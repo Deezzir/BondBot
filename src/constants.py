@@ -16,6 +16,9 @@ ASSOCIATED_TOKEN_PROGRAM_ID: Pubkey = Pubkey.from_string(
 TOKEN_PROGRAM_ID: Pubkey = Pubkey.from_string(
     "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
 )
+PUMP_AMM_ADDRESS: Pubkey = Pubkey.from_string(
+    "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA",
+)
 
 MAX_FETCH_RETRIES: int = 3
 PUMP_API: str = "https://frontend-api-v3.pump.fun"

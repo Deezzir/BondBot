@@ -2,25 +2,25 @@
 
 import asyncio
 import logging
-from typing import Any, List, Optional, cast
+from typing import Any, List, Optional
 
 from aiogram import Bot
 from aiogram.enums import ParseMode
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, URLInputFile
 from solana.rpc.async_api import AsyncClient
-from solana.rpc.types import Commitment
+from solana.rpc.types import Commitment, MemcmpOpts
 from solana.rpc.websocket_api import connect as ws_connect
 from solders.pubkey import Pubkey
 from solders.rpc.config import RpcTransactionLogsFilterMentions
-from solders.rpc.responses import GetTransactionResp
+from solders.rpc.responses import GetProgramAccountsResp, GetTransactionResp
 from solders.signature import Signature
 from solders.transaction_status import (
-    ParsedAccount,
     UiPartiallyDecodedInstruction,
     UiTransaction,
+    UiTransactionTokenBalance,
 )
 
-from constants import PUMP_MIGRATION_ADDRESS, RPC
+from constants import PUMP_AMM_ADDRESS, PUMP_MIGRATION_ADDRESS, RPC
 from utils import (
     AssetData,
     Holder,
@@ -170,7 +170,9 @@ class BondScrapper:
                 return instruction
         return None
 
-    async def _get_tx_details(self, sig: Signature) -> Optional[UiTransaction]:
+    async def _get_tx_details(
+        self, sig: Signature
+    ) -> Optional[List[UiTransactionTokenBalance]]:
         if not self.task:
             return None
         tx_raw = GetTransactionResp(None)
@@ -191,9 +193,43 @@ class BondScrapper:
                 if (
                     tx_raw.value
                     and tx_raw.value.transaction
-                    and isinstance(tx_raw.value.transaction.transaction, UiTransaction)
+                    and tx_raw.value.transaction.meta
                 ):
-                    return tx_raw.value.transaction.transaction
+                    return tx_raw.value.transaction.meta.post_token_balances
+            except Exception as e:
+                LOGGER.error(f"Error in _get_tx_details: {e}")
+            return None
+
+    async def _get_pump_amm(
+        self, mint: str
+    ) -> Optional[List[UiTransactionTokenBalance]]:
+        """Get the AMM pool of a pump coin."""
+        if not self.task:
+            return None
+        accounts = GetProgramAccountsResp([])
+        attempt = 0
+
+        async with AsyncClient(f"https://{self.rpc}") as client:
+            try:
+                while attempt < 10:
+                    accounts = await client.get_program_accounts(
+                        PUMP_AMM_ADDRESS,
+                        filters=[
+                            MemcmpOpts(
+                                offset=32 + 2 + 8 + 1,
+                                bytes=mint,
+                            )
+                        ],
+                        encoding="jsonParsed",
+                    )
+                    if accounts != GetProgramAccountsResp([]):
+                        break
+                    else:
+                        LOGGER.warning(f"Failed to get AMM for '{mint}', retrying...")
+                        attempt += 1
+                        await asyncio.sleep(0.5)
+                if accounts.value:
+                    return accounts.value
             except Exception as e:
                 LOGGER.error(f"Error in _get_tx_details: {e}")
             return None
@@ -203,15 +239,19 @@ class BondScrapper:
             return None
 
         if any(log for log in raw_tx.logs if "Migrate" in log) and not raw_tx.err:
-            tx = await self._get_tx_details(raw_tx.signature)
-            if not tx:
+            token_balances = await self._get_tx_details(raw_tx.signature)
+            if not token_balances:
                 return None
             LOGGER.info(f"Found the initilize new pool tx: {raw_tx.signature}")
-            mint = tx.message.account_keys[24]
-            if type(mint) is Pubkey:
-                return mint
-            elif type(mint) is ParsedAccount:
-                return mint.pubkey
+            mint_balance = next(
+                (
+                    token_balance
+                    for token_balance in token_balances
+                    if token_balance.ui_token_amount.ui_amount is None
+                ),
+                None,
+            )
+            return mint_balance.mint if mint_balance else None
         return None
 
     async def _subscribe_bonds(self) -> None:
@@ -294,12 +334,10 @@ class BondScrapper:
                             break
                 if bonding_curve:
                     bonding_curve_token = get_token_wallet(bonding_curve, mint)
-                    pump_token = get_token_wallet(PUMP_MIGRATION_ADDRESS, mint)
                     info.top_holders = [
                         holder
                         for holder in info.top_holders
                         if holder.address != str(bonding_curve_token)
-                        and holder.address != str(pump_token)
                     ]
                 info.top_holders_allocation = int(
                     sum(holder.allocation for holder in info.top_holders)
@@ -339,6 +377,6 @@ class BondScrapper:
             img_url=asset.image_uri,
             telegram=asset.telegram,
             website=asset.website,
-            pump=(f"https://pump.fun/{mint}"),
-            dex=f"https://dexscreener.com/solana/{asset.market_id}",
+            pump=f"https://pump.fun/{mint}",
+            dex=f"https://dexscreener.com/solana/{mint}",
         )
