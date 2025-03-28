@@ -182,7 +182,7 @@ class BondScrapper:
             try:
                 while attempt < 10:
                     tx_raw = await client.get_transaction(
-                        sig, "jsonParsed", Commitment("confirmed")
+                        sig, "jsonParsed", Commitment("confirmed"), max_supported_transaction_version=0
                     )
                     if tx_raw != GetTransactionResp(None):
                         break
@@ -237,8 +237,7 @@ class BondScrapper:
     async def _process_log(self, raw_tx: Any) -> Optional[Pubkey]:
         if not self.task:
             return None
-
-        if any(log for log in raw_tx.logs if "Migrate" in log) and not raw_tx.err:
+        if any(log for log in raw_tx.logs if "Migrate" in log and "Burn" in log) and not raw_tx.err:
             token_balances = await self._get_tx_details(raw_tx.signature)
             if not token_balances:
                 return None
