@@ -8,11 +8,11 @@ from aiogram import Bot
 from aiogram.enums import ParseMode
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, URLInputFile
 from solana.rpc.async_api import AsyncClient
-from solana.rpc.types import Commitment, MemcmpOpts
+from solana.rpc.types import Commitment
 from solana.rpc.websocket_api import connect as ws_connect
 from solders.pubkey import Pubkey
 from solders.rpc.config import RpcTransactionLogsFilterMentions
-from solders.rpc.responses import GetProgramAccountsResp, GetTransactionResp
+from solders.rpc.responses import GetTransactionResp
 from solders.signature import Signature
 from solders.transaction_status import (
     UiPartiallyDecodedInstruction,
@@ -20,12 +20,13 @@ from solders.transaction_status import (
     UiTransactionTokenBalance,
 )
 
-from constants import PUMP_AMM_ADDRESS, PUMP_MIGRATION_ADDRESS, RPC
+from constants import MAX_FETCH_RETRIES, PUMP_MIGRATION_ADDRESS, RPC, SOL_MINT_ADDRESS
 from utils import (
     AssetData,
     Holder,
     HoldersInfo,
     calculate_fill_time,
+    escape_markdown_v2,
     fetch_pump_coin,
     get_token_wallet,
     send_photo,
@@ -44,21 +45,18 @@ class BondScrapper:
         self.bot = bot
         self.chat_id = chat_id
 
-    async def start(self, chat_id: int) -> None:
+    async def start(self) -> None:
         """Start the Bond Scrapper."""
         if self.task:
-            await self.bot.send_message(chat_id, "Bond Scrapper already running.")
             return
 
-        await self.bot.send_message(chat_id, "Starting Bond Scrapper...")
         task = asyncio.create_task(self._subscribe_bonds())
         self.task = task
         await task
 
-    async def stop(self, chat_id: int) -> None:
+    async def stop(self) -> None:
         """Stop the Bond Scrapper."""
         if self.task:
-            await self.bot.send_message(chat_id, "Stopping Bond Scrapper...")
             self.task.cancel()
 
             try:
@@ -71,27 +69,29 @@ class BondScrapper:
         else:
             if not self.chat_id:
                 return
-            await self.bot.send_message(chat_id, "Bond Scrapper is not running.")
+            # await self.bot.send_message(chat_id, "Bond Scrapper is not running.")
 
     def _compress_dev_link(self, dev: str) -> str:
         """Compress the dev wallet link."""
-        compressed_string = dev[:4] + "\.\.\." + dev[-4:]
+        compressed_string = escape_markdown_v2(dev[:4] + "..." + dev[-4:])
         profile_link = f"[{compressed_string}](https://pump.fun/profile/{dev})"
         return profile_link
 
     async def _post_new_bond(self, asset: AssetData) -> None:
         """Post a new bond to the chat."""
         if not self.task or not self.bot or not self.chat_id:
-            LOGGER.error("Task not initialized")
             return
 
         keyboard_buttons: List[List[InlineKeyboardButton]] = []
         top_buttons = []
         bottom_buttons = []
 
+        title = escape_markdown_v2("- NEW BOND -")
+        token_info = escape_markdown_v2(f"{asset.name} (${asset.symbol})")
+
         payload = (
-            f"*\- NEW BOND \-*\n\n"
-            f"📛 *{asset.name} \(${asset.symbol}\)*\n"
+            f"*{title}*\n\n"
+            f"📛 *{token_info}*\n"
             f"📄 *CA:* `{asset.ca}`\n\n"
             f"👨‍💻 *Dev:* {self._compress_dev_link(asset.dev_wallet)}\n"
             f"🏛 *Dev Hodls:* {asset.dev_alloc if asset.dev_alloc > 1 else '<1%'}%\n\n"
@@ -100,7 +100,7 @@ class BondScrapper:
         allocation_strings = [
             f"{holder.allocation}%" for holder in asset.top_holders[:5]
         ]
-        result = " \| ".join(allocation_strings)
+        result = escape_markdown_v2(" | ".join(allocation_strings))
         payload += result
         payload += (
             f"\n*🏦 Top 20 Hodlers allocation:* {asset.top_holders_allocation}%\n"
@@ -175,78 +175,56 @@ class BondScrapper:
     ) -> Optional[List[UiTransactionTokenBalance]]:
         if not self.task:
             return None
+
         tx_raw = GetTransactionResp(None)
         attempt = 0
 
         async with AsyncClient(f"https://{self.rpc}") as client:
             try:
-                while attempt < 10:
+                while attempt < MAX_FETCH_RETRIES:
                     tx_raw = await client.get_transaction(
-                        sig, "jsonParsed", Commitment("confirmed"), max_supported_transaction_version=0
+                        sig,
+                        "jsonParsed",
+                        Commitment("confirmed"),
+                        max_supported_transaction_version=0,
                     )
                     if tx_raw != GetTransactionResp(None):
                         break
-                    else:
-                        LOGGER.warning(f"Failed to get transaction {sig}, retrying...")
-                        attempt += 1
-                        await asyncio.sleep(0.5)
+
+                    LOGGER.warning("Failed to get transaction %s, retrying...", sig)
+                    attempt += 1
+                    await asyncio.sleep(0.5)
                 if (
                     tx_raw.value
                     and tx_raw.value.transaction
                     and tx_raw.value.transaction.meta
                 ):
                     return tx_raw.value.transaction.meta.post_token_balances
-            except Exception as e:
-                LOGGER.error(f"Error in _get_tx_details: {e}")
+            except Exception as e:  # pylint: disable=broad-except
+                LOGGER.error("Error in _get_tx_details: %s", e)
             return None
 
-    async def _get_pump_amm(
-        self, mint: str
-    ) -> Optional[List[UiTransactionTokenBalance]]:
-        """Get the AMM pool of a pump coin."""
-        if not self.task:
-            return None
-        accounts = GetProgramAccountsResp([])
-        attempt = 0
-
-        async with AsyncClient(f"https://{self.rpc}") as client:
-            try:
-                while attempt < 10:
-                    accounts = await client.get_program_accounts(
-                        PUMP_AMM_ADDRESS,
-                        filters=[
-                            MemcmpOpts(
-                                offset=32 + 2 + 8 + 1,
-                                bytes=mint,
-                            )
-                        ],
-                        encoding="jsonParsed",
-                    )
-                    if accounts != GetProgramAccountsResp([]):
-                        break
-                    else:
-                        LOGGER.warning(f"Failed to get AMM for '{mint}', retrying...")
-                        attempt += 1
-                        await asyncio.sleep(0.5)
-                if accounts.value:
-                    return accounts.value
-            except Exception as e:
-                LOGGER.error(f"Error in _get_tx_details: {e}")
-            return None
+    def _is_migrate_tx(self, logs: list[str]) -> bool:
+        """Check if logs contain both 'Migrate' and 'Burn' entries."""
+        has_migrate = any("migrate" in log.lower() for log in logs)
+        is_second = any("already migrated" in log.lower() for log in logs)
+        return has_migrate and not is_second
 
     async def _process_log(self, raw_tx: Any) -> Optional[Pubkey]:
         if not self.task:
             return None
-        if any(log for log in raw_tx.logs if "Migrate" in log and "Burn" in log) and not raw_tx.err:
+
+        if not raw_tx.err and self._is_migrate_tx(raw_tx.logs):
             token_balances = await self._get_tx_details(raw_tx.signature)
             if not token_balances:
                 return None
-            LOGGER.info(f"Found the initilize new pool tx: {raw_tx.signature}")
+            LOGGER.info("Found the initilize new pool tx: %s", raw_tx.signature)
             mint_balance = next(
                 (
                     token_balance
                     for token_balance in token_balances
                     if token_balance.ui_token_amount.ui_amount is None
+                    and token_balance.mint != SOL_MINT_ADDRESS
                 ),
                 None,
             )
@@ -277,18 +255,18 @@ class BondScrapper:
                         try:
                             mint = await self._process_log(log[0].result.value)  # type: ignore
                             if mint:
-                                LOGGER.info(f"Found new bond: {str(mint)}")
+                                LOGGER.info("Found new bond: %s", str(mint))
                                 asset_info = await self._get_asset_info(mint)
                                 if asset_info:
                                     await self._post_new_bond(asset_info)
-                        except Exception as e:
-                            LOGGER.error(f"Error processing a log: {e}")
+                        except Exception as e:  # pylint: disable=broad-except
+                            LOGGER.error("Error processing a log: %s", e)
                 except asyncio.CancelledError:
                     LOGGER.info("The task was canceled. Cleaning up...")
                     done = True
                     break
-                except Exception as e:
-                    LOGGER.error(f"Error with the WebSocket connection: {e}")
+                except Exception as e:  # pylint: disable=broad-except
+                    LOGGER.error("Error with the WebSocket connection: %s", e)
                 finally:
                     if websocket.open and sub_id:
                         await websocket.logs_unsubscribe(sub_id)
@@ -305,46 +283,54 @@ class BondScrapper:
         if not self.task:
             return None
 
+        attempt = 0
+
         async with AsyncClient(f"https://{self.rpc}") as client:
-            try:
-                info = HoldersInfo(
-                    top_holders=[], dev_allocation=0, top_holders_allocation=0
-                )
-                total_supply = await client.get_token_supply(mint)
-                holders_raw = await client.get_token_largest_accounts(mint)
-                for holder_raw in holders_raw.value:
-                    info.top_holders.append(
-                        Holder(
-                            address=str(holder_raw.address),
-                            allocation=int(
-                                round(
-                                    int(holder_raw.amount.amount)
-                                    / int(total_supply.value.amount)
-                                    * 100
-                                )
-                            ),
-                        )
+            while attempt < MAX_FETCH_RETRIES:
+                try:
+                    info = HoldersInfo(
+                        top_holders=[], dev_allocation=0, top_holders_allocation=0
                     )
-                if dev:
-                    dev_token = get_token_wallet(dev, mint)
-                    for holder in info.top_holders:
-                        if holder.address == str(dev_token):
-                            info.dev_allocation = holder.allocation
-                            break
-                if bonding_curve:
-                    bonding_curve_token = get_token_wallet(bonding_curve, mint)
-                    info.top_holders = [
-                        holder
-                        for holder in info.top_holders
-                        if holder.address != str(bonding_curve_token)
-                    ]
-                info.top_holders_allocation = int(
-                    sum(holder.allocation for holder in info.top_holders)
-                )
-                return info
-            except Exception as e:
-                LOGGER.error(f"Error in get_allocation_info: {e}")
-                return None
+                    total_supply = await client.get_token_supply(
+                        mint, Commitment("confirmed")
+                    )
+                    holders_raw = await client.get_token_largest_accounts(
+                        mint, Commitment("confirmed")
+                    )
+                    for holder_raw in holders_raw.value:
+                        info.top_holders.append(
+                            Holder(
+                                address=str(holder_raw.address),
+                                allocation=int(
+                                    round(
+                                        int(holder_raw.amount.amount)
+                                        / int(total_supply.value.amount)
+                                        * 100
+                                    )
+                                ),
+                            )
+                        )
+                    if dev:
+                        dev_token = get_token_wallet(dev, mint)
+                        for holder in info.top_holders:
+                            if holder.address == str(dev_token):
+                                info.dev_allocation = holder.allocation
+                                break
+                    if bonding_curve:
+                        bonding_curve_token = get_token_wallet(bonding_curve, mint)
+                        info.top_holders = [
+                            holder
+                            for holder in info.top_holders
+                            if holder.address != str(bonding_curve_token)
+                        ]
+                    info.top_holders_allocation = int(
+                        sum(holder.allocation for holder in info.top_holders)
+                    )
+                    return info
+                except Exception as e:  # pylint: disable=broad-except
+                    LOGGER.error("Error in get_allocation_info: %s, retrying...", e)
+                    attempt += 1
+            return None
 
     async def _get_asset_info(self, mint: Pubkey) -> Optional[AssetData]:
         if not self.task:

@@ -16,7 +16,7 @@ skip_glob = [".git", ".tox", ".venv"]
 
 [tool.pylint]
 max-line-length = 99
-disable = ["C0114", "C0115", "C0116"]
+disable = ["C0114", "C0115", "C0116", "R0913", "R0902", "R0917"]
 ignore = ['.git', '.tox', '.venv']
 
 [tool.mypy]

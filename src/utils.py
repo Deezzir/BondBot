@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import re
 from dataclasses import dataclass, fields
 from datetime import datetime
 from typing import List, Optional, Union
@@ -23,11 +24,16 @@ from solders.pubkey import Pubkey
 from constants import (
     ASSOCIATED_TOKEN_PROGRAM_ID,
     MAX_FETCH_RETRIES,
+    NOT_FOUND_IMAGE_URL,
     PUMP_API,
     TOKEN_PROGRAM_ID,
 )
 
 LOGGER: logging.Logger = logging.getLogger(__name__)
+
+
+class PumpAPIError(Exception):
+    """Custom exception for Pump API errors."""
 
 
 @dataclass
@@ -130,7 +136,10 @@ async def send_photo(
             )
             return msg
         except TelegramAPIError as e:
-            LOGGER.error(f"Failed to send photo: {e}")
+            LOGGER.error("Failed to send photo: %s", e)
+            if "ClientOSError: [Errno -2]" in e.message:
+                photo = NOT_FOUND_IMAGE_URL
+                LOGGER.warning("Using default image URL.")
             attempts += 1
             await asyncio.sleep(1)
     return None
@@ -146,18 +155,22 @@ async def fetch_pump_coin(mint: str) -> Optional[PumpCoin]:
         while attempts < max_attempts:
             try:
                 async with session.get(url) as response:
-                    if not response.ok:
-                        raise Exception(f"HTTP error! Status: {response.status}")
+                    if response.status != 200:
+                        raise PumpAPIError(f"HTTP error! Status: {response.status}")
 
                     data = await response.json()
-                    if not data.get("mint", None):
-                        raise Exception("Invalid Data")
+                    if not data.get("mint"):
+                        raise PumpAPIError("Invalid data: missing 'mint' field")
+
                     return PumpCoin.from_dict(data)
-            except Exception as e:
-                LOGGER.error(f"Failed to get Pump Metadata: {e}")
+
+            except (aiohttp.ClientError, PumpAPIError, asyncio.TimeoutError) as e:
+                LOGGER.error(
+                    "Failed to get Pump Metadata (attempt %d): %s", attempts + 1, e
+                )
                 attempts += 1
                 await asyncio.sleep(5)
-        return None
+    return None
 
 
 def get_token_wallet(owner: Pubkey, mint: Pubkey) -> Pubkey:
@@ -179,17 +192,22 @@ def calculate_fill_time(timestamp: int) -> str:
         return (
             f"{int(time_difference_days)} days" if time_difference_days > 1 else "1 day"
         )
-    elif time_difference_seconds >= 3600:
+    if time_difference_seconds >= 3600:
         time_difference_hours = time_difference_seconds / 3600
         return (
             f"{int(time_difference_hours)} hours"
             if time_difference_hours > 1
             else "1 hour"
         )
-    else:
-        time_difference_minutes = time_difference_seconds / 60
-        return (
-            f"{int(time_difference_minutes)} minutes"
-            if time_difference_minutes > 1
-            else "1 minute"
-        )
+    time_difference_minutes = time_difference_seconds / 60
+    return (
+        f"{int(time_difference_minutes)} minutes"
+        if time_difference_minutes > 1
+        else "1 minute"
+    )
+
+
+def escape_markdown_v2(text: str) -> str:
+    """Escape special characters for Telegram MarkdownV2 parse mode."""
+    escape_chars = r"_*\[\]()~`>#+-=|{}.!"
+    return re.sub(rf"([{re.escape(escape_chars)}])", r"\\\1", text)
