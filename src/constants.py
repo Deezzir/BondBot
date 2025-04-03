@@ -1,6 +1,7 @@
 """Constants to be used by the bot."""
 
 from os import getenv
+from typing import Optional
 
 from dotenv import load_dotenv
 from solders.pubkey import Pubkey
@@ -30,3 +31,4 @@ RPC: str = getenv("RPC", "")
 BOT_TOKEN: str = getenv("BOT_TOKEN", "")
 MAIN_GROUP_ID: int = int(getenv("MAIN_GROUP_ID", ""))
 ADMIN_ID: int = int(getenv("ADMIN_ID", ""))
+TOPIC_ID: Optional[int] = int(getenv("TOPIC_ID", "")) if getenv("TOPIC_ID", "").isdigit() else None

@@ -38,12 +38,13 @@ LOGGER: logging.Logger = logging.getLogger(__name__)
 class BondScrapper:
     """Bond Scrapper class."""
 
-    def __init__(self, bot: Bot, chat_id: int) -> None:
+    def __init__(self, bot: Bot, chat_id: int, topic_id: Optional[int]) -> None:
         """Initialize New Bond scrapper."""
         self.rpc = RPC
         self.task: Optional[asyncio.Task[Any]] = None
         self.bot = bot
         self.chat_id = chat_id
+        self.topic_id = topic_id
 
     async def start(self) -> None:
         """Start the Bond Scrapper."""
@@ -152,6 +153,7 @@ class BondScrapper:
             payload,
             keyboard,
             parse_mode=ParseMode.MARKDOWN_V2,
+            topic_id=self.topic_id,
         )
 
     def _find_instruction_by_program_id(

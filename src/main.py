@@ -11,12 +11,12 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 
 from bonds import BondScrapper
-from constants import BOT_TOKEN, MAIN_GROUP_ID
+from constants import BOT_TOKEN, MAIN_GROUP_ID, TOPIC_ID
 
 # Globals
 BOT: Bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 DISPATCHER: Dispatcher = Dispatcher()
-SCRAPPER: BondScrapper = BondScrapper(bot=BOT, chat_id=MAIN_GROUP_ID)
+SCRAPPER: BondScrapper = BondScrapper(bot=BOT, chat_id=MAIN_GROUP_ID, topic_id=TOPIC_ID)
 
 
 async def main() -> None:

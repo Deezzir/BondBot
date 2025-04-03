@@ -120,6 +120,7 @@ async def send_photo(
         ]
     ] = None,
     parse_mode: ParseMode = ParseMode.HTML,
+    topic_id: Optional[int] = None,
 ) -> Optional[Message]:
     """Send a photo to a chat with a caption and a keyboard."""
     attempts = 0
@@ -129,6 +130,7 @@ async def send_photo(
         try:
             msg = await bot.send_photo(
                 chat_id=chat_id,
+                message_thread_id=topic_id,
                 photo=photo,
                 caption=caption,
                 parse_mode=parse_mode,
