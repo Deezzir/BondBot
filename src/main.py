@@ -10,18 +10,31 @@ from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 
-from bonds import BondScrapper
-from constants import BOT_TOKEN, MAIN_GROUP_ID, TOPIC_ID
+from bonk_bonds import BonkBondScrapper
+from constants import (
+    BONK_GROUP_ID,
+    BONK_TOPIC_ID,
+    BOT_TOKEN,
+    PUMP_GROUP_ID,
+    PUMP_TOPIC_ID,
+)
+from pump_bonds import PumpBondScrapper
 
 # Globals
 BOT: Bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 DISPATCHER: Dispatcher = Dispatcher()
-SCRAPPER: BondScrapper = BondScrapper(bot=BOT, chat_id=MAIN_GROUP_ID, topic_id=TOPIC_ID)
+PUMP_SCRAPPER: PumpBondScrapper = PumpBondScrapper(
+    bot=BOT, chat_id=PUMP_GROUP_ID, topic_id=PUMP_TOPIC_ID
+)
+BONK_SCRAPPER: BonkBondScrapper = BonkBondScrapper(
+    bot=BOT, chat_id=BONK_GROUP_ID, topic_id=BONK_TOPIC_ID
+)
 
 
 async def main() -> None:
     """Bot main."""
-    asyncio.create_task(SCRAPPER.start())
+    asyncio.create_task(PUMP_SCRAPPER.start())
+    asyncio.create_task(BONK_SCRAPPER.start())
     await DISPATCHER.start_polling(BOT)
 
 

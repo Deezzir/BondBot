@@ -3,7 +3,7 @@
 import asyncio
 import logging
 import re
-from dataclasses import dataclass, fields
+from dataclasses import dataclass
 from datetime import datetime
 from typing import List, Optional, Union
 
@@ -19,10 +19,13 @@ from aiogram.types import (
     ReplyKeyboardMarkup,
     ReplyKeyboardRemove,
 )
+from pydantic import BaseModel, Field
 from solders.pubkey import Pubkey
 
 from constants import (
     ASSOCIATED_TOKEN_PROGRAM_ID,
+    JUPITER_API,
+    LAUNCHLAB_API,
     MAX_FETCH_RETRIES,
     NOT_FOUND_IMAGE_URL,
     PUMP_API,
@@ -32,7 +35,7 @@ from constants import (
 LOGGER: logging.Logger = logging.getLogger(__name__)
 
 
-class PumpAPIError(Exception):
+class FetchError(Exception):
     """Custom exception for Pump API errors."""
 
 
@@ -53,8 +56,37 @@ class HoldersInfo:
     top_holders_allocation: int
 
 
-@dataclass
-class AssetData:
+class TradeStats(BaseModel):
+    """Data class to represent the trade statistics of a token."""
+
+    price_change: float = Field(0, alias="priceChange")
+    holder_change: float = Field(0, alias="holderChange")
+    liquidity_change: float = Field(0, alias="liquidityChange")
+    buy_volume: float = Field(0, alias="buyVolume")
+    sell_volume: float = Field(0, alias="sellVolume")
+    buy_organic_volume: float = Field(0, alias="buyOrganicVolume")
+    sell_organic_volume: float = Field(0, alias="sellOrganicVolume")
+    num_buys: int = Field(0, alias="numBuys")
+    num_sells: int = Field(0, alias="numSells")
+    num_traders: int = Field(0, alias="numTraders")
+    num_organic_buyers: int = Field(0, alias="numOrganicBuyers")
+    num_net_buyers: int = Field(0, alias="numNetBuyers")
+
+
+class TokenStats(BaseModel):
+    """Data class to represent the statistics of a token."""
+
+    circ_supply: float = Field(..., alias="circSupply")
+    total_supply: float = Field(..., alias="totalSupply")
+    launchpad: str = Field(..., alias="launchpad")
+    holder_count: int = Field(..., alias="holderCount")
+    organic_score_label: str = Field(..., alias="organicScoreLabel")
+    stats_1h: Optional[TradeStats] = Field(None, alias="stats1h")
+    stats_6h: Optional[TradeStats] = Field(None, alias="stats6h")
+    stats_24h: Optional[TradeStats] = Field(None, alias="stats24h")
+
+
+class TokenAssetData(BaseModel):
     """Data class to represent the data of a token."""
 
     dev_wallet: str
@@ -69,12 +101,29 @@ class AssetData:
     twitter: Optional[str]
     telegram: Optional[str]
     website: Optional[str]
-    pump: Optional[str]
+    platform: Optional[str]
     dex: str
+    stats: Optional[TokenStats] = None
 
 
-@dataclass
-class PumpCoin:
+class LaunchLabCoin(BaseModel):
+    """Data class to represent a LaunchLab coin."""
+
+    mint: str = Field(..., alias="mint")
+    name: str = Field(..., alias="name")
+    symbol: str = Field(..., alias="symbol")
+    description: Optional[str] = Field(None, alias="description")
+    pool_id: str = Field(..., alias="poolId")
+    creator: str = Field(..., alias="creator")
+    created_at: int = Field(..., alias="createAt")
+    img_url: str = Field(..., alias="imgUrl")
+    metadata_url: str = Field(..., alias="metadataUrl")
+    website: Optional[str] = Field(None, alias="website")
+    twitter: Optional[str] = Field(None, alias="twitter")
+    telegram: Optional[str] = Field(None, alias="telegram")
+
+
+class PumpCoin(BaseModel):
     """Data class to represent a pump coin."""
 
     mint: str
@@ -89,24 +138,15 @@ class PumpCoin:
     associated_bonding_curve: str
     creator: str
     created_timestamp: int
-    raydium_pool: str
+    raydium_pool: Optional[str]
     complete: bool
     virtual_sol_reserves: float
     virtual_token_reserves: float
     total_supply: float
     website: Optional[str]
     market_cap: float
-    market_id: str
+    market_id: Optional[str]
     usd_market_cap: float
-
-    @classmethod
-    def from_dict(cls, data: dict) -> "PumpCoin":
-        """Create a PumpCoin object from a dictionary."""
-        field_names = {field.name for field in fields(cls)}
-        filtered_data = {
-            key: value for key, value in data.items() if key in field_names
-        }
-        return cls(**filtered_data)
 
 
 async def send_photo(
@@ -158,17 +198,77 @@ async def fetch_pump_coin(mint: str) -> Optional[PumpCoin]:
             try:
                 async with session.get(url) as response:
                     if response.status != 200:
-                        raise PumpAPIError(f"HTTP error! Status: {response.status}")
+                        raise FetchError(f"HTTP error! Status: {response.status}")
 
                     data = await response.json()
                     if not data.get("mint"):
-                        raise PumpAPIError("Invalid data: missing 'mint' field")
+                        raise FetchError("Invalid data: missing 'mint' field")
 
-                    return PumpCoin.from_dict(data)
+                    return PumpCoin.model_validate(data)
 
-            except (aiohttp.ClientError, PumpAPIError, asyncio.TimeoutError) as e:
+            except (aiohttp.ClientError, FetchError, asyncio.TimeoutError) as e:
                 LOGGER.error(
                     "Failed to get Pump Metadata (attempt %d): %s", attempts + 1, e
+                )
+                attempts += 1
+                await asyncio.sleep(5)
+    return None
+
+
+async def fetch_launchlab_coin(mint: str) -> Optional[LaunchLabCoin]:
+    """Fetch the metadata of a LaunchLab coin."""
+    attempts = 0
+    max_attempts = MAX_FETCH_RETRIES
+    url = f"{LAUNCHLAB_API}?ids={mint}"
+
+    async with aiohttp.ClientSession() as session:
+        while attempts < max_attempts:
+            try:
+                async with session.get(url) as response:
+                    if response.status != 200:
+                        raise FetchError(f"HTTP error! Status: {response.status}")
+
+                    data = await response.json()
+                    if data.get("success") is False:
+                        raise FetchError(
+                            "API error: " + data.get("error", "Unknown error")
+                        )
+                    if data.get("data") is None:
+                        raise FetchError("No data found for the given mint")
+
+                    token_data = data["data"]["rows"][0]
+                    return LaunchLabCoin.model_validate(token_data)
+
+            except (aiohttp.ClientError, FetchError, asyncio.TimeoutError) as e:
+                LOGGER.error(
+                    "Failed to get LaunchLab Metadata (attempt %d): %s", attempts + 1, e
+                )
+                attempts += 1
+                await asyncio.sleep(5)
+    return None
+
+
+async def fetch_token_stats(mint: str) -> Optional[TokenStats]:
+    """Fetch token statistics from the LaunchLab API."""
+    attempts = 0
+    max_attempts = MAX_FETCH_RETRIES
+    url = f"{JUPITER_API}?query={mint}"
+
+    async with aiohttp.ClientSession() as session:
+        while attempts < max_attempts:
+            try:
+                async with session.get(url) as response:
+                    if response.status != 200:
+                        raise FetchError(f"HTTP error! Status: {response.status}")
+
+                    data = await response.json()
+                    if len(data) == 0:
+                        raise FetchError("No data found for the given mint")
+                    return TokenStats.model_validate(data[0])
+
+            except (aiohttp.ClientError, FetchError, asyncio.TimeoutError) as e:
+                LOGGER.error(
+                    "Failed to get Token Stats (attempt %d): %s", attempts + 1, e
                 )
                 attempts += 1
                 await asyncio.sleep(5)
@@ -195,11 +295,9 @@ def calculate_fill_time(timestamp: int) -> str:
             f"{int(time_difference_days)} days" if time_difference_days > 1 else "1 day"
         )
     if time_difference_seconds >= 3600:
-        time_difference_hours = time_difference_seconds / 3600
+        time_difference_hours = int(time_difference_seconds / 3600)
         return (
-            f"{int(time_difference_hours)} hours"
-            if time_difference_hours > 1
-            else "1 hour"
+            f"{time_difference_hours} hours" if time_difference_hours > 1 else "1 hour"
         )
     time_difference_minutes = time_difference_seconds / 60
     return (
@@ -213,3 +311,8 @@ def escape_markdown_v2(text: str) -> str:
     """Escape special characters for Telegram MarkdownV2 parse mode."""
     escape_chars = r"_*\[\]()~`>#+-=|{}.!"
     return re.sub(rf"([{re.escape(escape_chars)}])", r"\\\1", text)
+
+
+def format_currency(value: float) -> str:
+    """Format a float into a currency string."""
+    return f"{value:,.2f}"
