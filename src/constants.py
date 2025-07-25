@@ -26,8 +26,14 @@ PUMP_AMM_ADDRESS: Pubkey = Pubkey.from_string(
 LAUNCHLAB_MIGRATION_ADDRESS: Pubkey = Pubkey.from_string(
     "LockrWmn6K5twhz3y9w1dQERbmgSaRkfnTeTKbpofwE",
 )
-BONK_CONFIG: Pubkey = Pubkey.from_string(
+BONK_CONFIG_1: Pubkey = Pubkey.from_string(
     "FfYek5vEz23cMkWsdJwG2oa6EphsvXSHrGpdALN4g6W1",
+)
+BONK_CONFIG_2: Pubkey = Pubkey.from_string(
+    "BuM6KDpWiTcxvrpXywWFiw45R2RNH8WURdvqoTDV1BW4",
+)
+BONK_CONFIG_3: Pubkey = Pubkey.from_string(
+    "8pCtbn9iatQ8493mDQax4xfEUjhoVBpUWYVQoRU18333",
 )
 
 NOT_FOUND_IMAGE_URL: str = "https://i.ibb.co/fzyGtQ3k/not-found.jpg"

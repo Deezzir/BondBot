@@ -8,7 +8,7 @@ from solders.pubkey import Pubkey
 from solders.transaction_status import EncodedConfirmedTransactionWithStatusMeta
 
 from bonds import Scrapper
-from constants import BONK_CONFIG, LAUNCHLAB_MIGRATION_ADDRESS
+from constants import BONK_CONFIG_1, BONK_CONFIG_2, BONK_CONFIG_3, LAUNCHLAB_MIGRATION_ADDRESS
 from utils import (
     TokenAssetData,
     calculate_fill_time,
@@ -28,7 +28,7 @@ class BonkBondScrapper(Scrapper):
         super().__init__(bot, chat_id, topic_id)
         self.platform = "🔨 Bonk"
         self.migration_address = LAUNCHLAB_MIGRATION_ADDRESS
-        self.bonk_config = BONK_CONFIG
+        self.bonk_configs = [BONK_CONFIG_1, BONK_CONFIG_2, BONK_CONFIG_3]
 
     def _compress_dev_link(self, dev: str) -> str:
         """Compress the dev wallet link."""
@@ -44,12 +44,16 @@ class BonkBondScrapper(Scrapper):
 
     def _is_migrate_tx(self, tx: EncodedConfirmedTransactionWithStatusMeta) -> bool:
         """Check if transaction is a migration."""
-        if not tx.transaction.transaction or not tx.transaction.transaction.message:  # type: ignore
+        if not tx.transaction.transaction:
+            return False
+
+        transaction_obj = tx.transaction.transaction
+        if not hasattr(transaction_obj, "message"):
             return False
 
         return any(
-            addr.pubkey == self.bonk_config  # type: ignore
-            for addr in tx.transaction.transaction.message.account_keys  # type: ignore
+            addr.pubkey in self.bonk_configs # type: ignore
+            for addr in transaction_obj.message.account_keys
         )
 
     async def _get_asset_info(self, mint: Pubkey) -> Optional[TokenAssetData]:
