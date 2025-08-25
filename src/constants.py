@@ -38,13 +38,33 @@ BONK_CONFIG_3: Pubkey = Pubkey.from_string(
 
 NOT_FOUND_IMAGE_URL: str = "https://i.ibb.co/fzyGtQ3k/not-found.jpg"
 MAX_FETCH_RETRIES: int = 3
+
 PUMP_API: str = "https://frontend-api-v3.pump.fun"
 LAUNCHLAB_API: str = "https://launch-mint-v1.raydium.io/get/by/mints"
 JUPITER_API: str = "https://lite-api.jup.ag/tokens/v2/search"
+X_API_URL = "https://twitter-api45.p.rapidapi.com"
+
 RPC: str = getenv("RPC", "")
 BOT_TOKEN: str = getenv("BOT_TOKEN", "")
 PUMP_GROUP_ID: int = int(getenv("PUMP_GROUP_ID", ""))
 BONK_GROUP_ID: int = int(getenv("BONK_GROUP_ID", ""))
+X_GROUP_ID: int = int(getenv("X_GROUP_ID", ""))
+RAPIDAPI_KEY: str = getenv("RAPIDAPI_KEY", "")
+
+X_SCRAPPER_FETCH_INTERVAL: int = 10  # 10 seconds
+X_SCRAPPER_MIN_FAVES: int = int(getenv("X_SCRAPPER_MIN_FAVES", "20"))
+X_SCRAPPER_MIN_REPLIES: int = int(getenv("X_SCRAPPER_MIN_REPLIES", "6"))
+X_SCRAPPER_MIN_RETWEETS: int = int(getenv("X_SCRAPPER_MIN_RETWEETS", "10"))
+X_SCRAPPER_MAX_REPLIES: int = int(getenv("X_SCRAPPER_MAX_REPLIES", "60"))
+X_SCRAPPER_MAX_RETWEETS: int = int(getenv("X_SCRAPPER_MAX_RETWEETS", "80"))
+X_SCRAPPER_MAX_FAVES: int = int(getenv("X_SCRAPPER_MAX_FAVES", "200"))
+X_FILTER_USER_MAX_FOLLOWERS: int = int(getenv("X_FILTER_USER_FOLLOWERS", "100000"))
+X_FILTER_POST_MIN_VIEWS: int = int(getenv("X_FILTER_POST_VIEWS", "200"))
+
+MONGODB_URI: Optional[str] = getenv("MONGODB_URI", None)
+MONGODB_DB_NAME: str = getenv("MONGODB_DB_NAME", "bondbot")
+MONGODB_COLLECTION_NAME: str = getenv("MONGODB_COLLECTION_NAME", "tweets")
+
 PUMP_TOPIC_ID: Optional[int] = (
     int(getenv("PUMP_TOPIC_ID", "")) if getenv("PUMP_TOPIC_ID", "").isdigit() else None
 )

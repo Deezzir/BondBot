@@ -1,35 +1,39 @@
 """Utility functions and data classes that are used throughout the bot."""
 
-import asyncio
 import logging
 import re
 from dataclasses import dataclass
-from datetime import datetime
-from typing import List, Optional, Union
+from datetime import datetime, timezone
+from typing import Any, List, Literal, Optional, Tuple, Union
 
 import aiohttp
 from aiogram import Bot
 from aiogram.enums import ParseMode
-from aiogram.exceptions import TelegramAPIError
 from aiogram.types import (
     ForceReply,
     InlineKeyboardMarkup,
     InputFile,
+    InputMediaAudio,
+    InputMediaDocument,
+    InputMediaPhoto,
+    InputMediaVideo,
     Message,
     ReplyKeyboardMarkup,
     ReplyKeyboardRemove,
 )
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, computed_field, field_validator
 from solders.pubkey import Pubkey
+from tenacity import retry, stop_after_attempt, wait_fixed
 
 from constants import (
     ASSOCIATED_TOKEN_PROGRAM_ID,
     JUPITER_API,
     LAUNCHLAB_API,
     MAX_FETCH_RETRIES,
-    NOT_FOUND_IMAGE_URL,
     PUMP_API,
+    RAPIDAPI_KEY,
     TOKEN_PROGRAM_ID,
+    X_API_URL,
 )
 
 LOGGER: logging.Logger = logging.getLogger(__name__)
@@ -149,6 +153,119 @@ class PumpCoin(BaseModel):
     usd_market_cap: float
 
 
+class XUserInfo(BaseModel):
+    """Data class to represent a user on X (Twitter)."""
+
+    username: str = Field(..., alias="screen_name")
+    user_id: str = Field(..., alias="rest_id")
+    user_followers: int = Field(..., alias="followers_count")
+    user_following: int = Field(..., alias="friends_count")
+    verified: bool = Field(..., alias="verified")
+
+
+class MediaLink(BaseModel):
+    """Data class to represent a media link."""
+
+    type: Literal["photo", "video"]
+    url: str
+
+
+class TweetData(BaseModel):
+    """Data class to represent a tweet."""
+
+    user: XUserInfo = Field(..., alias="user_info")
+    post_views: int = Field(..., alias="views")
+    post_likes: int = Field(..., alias="favorites")
+    post_replies: int = Field(..., alias="replies")
+    post_retweets: int = Field(..., alias="retweets")
+    post_text: str = Field(..., alias="text")
+    post_id: str = Field(..., alias="tweet_id")
+    created_at: datetime = Field(..., alias="created_at")
+    media: List[MediaLink] = Field(default_factory=list, alias="media")
+
+    @classmethod
+    def _pick_video(cls, variants: Any) -> Optional[str]:
+        """Pick the lowest-bitrate MP4 variant."""
+        if not isinstance(variants, list):
+            return None
+        mp4s = [
+            v
+            for v in variants
+            if isinstance(v, dict)
+            and v.get("content_type") == "video/mp4"
+            and isinstance(v.get("bitrate"), int)
+            and isinstance(v.get("url"), str)
+        ]
+        if not mp4s:
+            return None
+        return min(mp4s, key=lambda v: v["bitrate"])["url"]
+
+    @field_validator("created_at", mode="before")
+    @classmethod
+    def _parse_twitter_dt(cls, v: Any) -> datetime:
+        if isinstance(v, datetime):
+            return (
+                v.replace(tzinfo=timezone.utc)
+                if v.tzinfo is None
+                else v.astimezone(timezone.utc)
+            )
+        dt = datetime.strptime(str(v), "%a %b %d %H:%M:%S %z %Y")
+        return dt.astimezone(timezone.utc)
+
+    @field_validator("media", mode="before")
+    @classmethod
+    def _pre_media(cls, v: Any) -> List[MediaLink] | Any:
+        if isinstance(v, list) and (not v or isinstance(v[0], (MediaLink, dict))):
+            return v
+
+        if not v or not isinstance(v, dict):
+            return []
+
+        out: List[MediaLink] = []
+
+        for p in v.get("photo") or []:
+            if isinstance(p, dict):
+                src = p.get("media_url_https") or p.get("url")
+                if isinstance(src, str):
+                    out.append(MediaLink(type="photo", url=src))
+
+        for vid in v.get("video") or []:
+            if isinstance(vid, dict):
+                src = cls._pick_video(vid.get("variants"))
+                if isinstance(src, str):
+                    out.append(MediaLink(type="video", url=src))
+
+        return out
+
+    @computed_field
+    @property
+    def post_url(self) -> str:
+        """Generate the URL of the tweet."""
+        return f"https://twitter.com/{self.user.username}/status/{self.post_id}"
+
+
+@retry(stop=stop_after_attempt(MAX_FETCH_RETRIES), wait=wait_fixed(5), reraise=True)
+async def send_video(
+    bot: Bot,
+    chat_id: int,
+    video_url: str,
+    caption: str,
+    keyboard: Optional[InlineKeyboardMarkup] = None,
+    parse_mode: ParseMode = ParseMode.MARKDOWN_V2,
+    topic_id: Optional[int] = None,
+) -> Message:
+    """Send a video to a chat with a caption and a keyboard."""
+    return await bot.send_video(
+        chat_id=chat_id,
+        message_thread_id=topic_id,
+        video=video_url,
+        caption=caption,
+        parse_mode=parse_mode,
+        reply_markup=keyboard,
+    )
+
+
+@retry(stop=stop_after_attempt(MAX_FETCH_RETRIES), wait=wait_fixed(5), reraise=True)
 async def send_photo(
     bot: Bot,
     chat_id: int,
@@ -163,116 +280,159 @@ async def send_photo(
     topic_id: Optional[int] = None,
 ) -> Optional[Message]:
     """Send a photo to a chat with a caption and a keyboard."""
-    attempts = 0
-    max_attempts = MAX_FETCH_RETRIES
+    return await bot.send_photo(
+        chat_id=chat_id,
+        message_thread_id=topic_id,
+        photo=photo,
+        caption=caption,
+        parse_mode=parse_mode,
+        reply_markup=keyboard,
+    )
 
-    while attempts < max_attempts:
-        try:
-            msg = await bot.send_photo(
-                chat_id=chat_id,
-                message_thread_id=topic_id,
-                photo=photo,
-                caption=caption,
-                parse_mode=parse_mode,
-                reply_markup=keyboard,
+
+@retry(stop=stop_after_attempt(MAX_FETCH_RETRIES), wait=wait_fixed(5), reraise=True)
+async def send_message(
+    bot: Bot,
+    chat_id: int,
+    text: str,
+    keyboard: Optional[
+        Union[
+            InlineKeyboardMarkup, ReplyKeyboardMarkup, ReplyKeyboardRemove, ForceReply
+        ]
+    ] = None,
+    parse_mode: ParseMode = ParseMode.HTML,
+    topic_id: Optional[int] = None,
+    disable_web_page_preview: bool = False,
+) -> Optional[Message]:
+    """Send a message to a chat with a keyboard."""
+    return await bot.send_message(
+        chat_id=chat_id,
+        message_thread_id=topic_id,
+        text=text,
+        parse_mode=parse_mode,
+        reply_markup=keyboard,
+        disable_web_page_preview=disable_web_page_preview,
+    )
+
+
+def build_media_group(
+    media: List[MediaLink],
+    caption: str,
+    parse_mode: ParseMode,
+    max_items: int = 10,
+) -> List[InputMediaAudio | InputMediaDocument | InputMediaPhoto | InputMediaVideo]:
+    """Build a media group from a list of media links."""
+    media_group: List[
+        Union[InputMediaAudio, InputMediaDocument, InputMediaPhoto, InputMediaVideo]
+    ] = []
+    items = media[:max_items]
+
+    for i, m in enumerate(items):
+        with_caption = i == 0
+        if m.type == "photo":
+            media_group.append(
+                InputMediaPhoto(
+                    media=m.url,
+                    caption=caption if with_caption else None,
+                    parse_mode=parse_mode if with_caption else None,
+                )
             )
-            return msg
-        except TelegramAPIError as e:
-            LOGGER.error("Failed to send photo: %s", e)
-            if "ClientOSError: [Errno -2]" in e.message:
-                photo = NOT_FOUND_IMAGE_URL
-                LOGGER.warning("Using default image URL.")
-            attempts += 1
-            await asyncio.sleep(1)
-    return None
+        elif m.type == "video":
+            media_group.append(
+                InputMediaVideo(
+                    media=m.url,
+                    caption=caption if with_caption else None,
+                    parse_mode=parse_mode if with_caption else None,
+                )
+            )
+    return media_group
 
 
+@retry(stop=stop_after_attempt(MAX_FETCH_RETRIES), wait=wait_fixed(5), reraise=True)
 async def fetch_pump_coin(mint: str) -> Optional[PumpCoin]:
     """Fetch the metadata of a pump coin from the Pump API."""
-    attempts = 0
-    max_attempts = MAX_FETCH_RETRIES
     url = f"{PUMP_API}/coins/{mint}"
 
     async with aiohttp.ClientSession() as session:
-        while attempts < max_attempts:
-            try:
-                async with session.get(url) as response:
-                    if response.status != 200:
-                        raise FetchError(f"HTTP error! Status: {response.status}")
+        async with session.get(url) as response:
+            if response.status != 200:
+                raise FetchError(f"HTTP error! Status: {response.status}")
 
-                    data = await response.json()
-                    if not data.get("mint"):
-                        raise FetchError("Invalid data: missing 'mint' field")
+            data = await response.json()
+            if not data.get("mint"):
+                raise FetchError("Invalid data: missing 'mint' field")
 
-                    return PumpCoin.model_validate(data)
-
-            except (aiohttp.ClientError, FetchError, asyncio.TimeoutError) as e:
-                LOGGER.error(
-                    "Failed to get Pump Metadata (attempt %d): %s", attempts + 1, e
-                )
-                attempts += 1
-                await asyncio.sleep(5)
-    return None
+            return PumpCoin.model_validate(data)
 
 
+@retry(stop=stop_after_attempt(MAX_FETCH_RETRIES), wait=wait_fixed(5), reraise=True)
 async def fetch_launchlab_coin(mint: str) -> Optional[LaunchLabCoin]:
     """Fetch the metadata of a LaunchLab coin."""
-    attempts = 0
-    max_attempts = MAX_FETCH_RETRIES
     url = f"{LAUNCHLAB_API}?ids={mint}"
 
     async with aiohttp.ClientSession() as session:
-        while attempts < max_attempts:
-            try:
-                async with session.get(url) as response:
-                    if response.status != 200:
-                        raise FetchError(f"HTTP error! Status: {response.status}")
+        async with session.get(url) as response:
+            if response.status != 200:
+                raise FetchError(f"HTTP error! Status: {response.status}")
 
-                    data = await response.json()
-                    if data.get("success") is False:
-                        raise FetchError(
-                            "API error: " + data.get("error", "Unknown error")
-                        )
-                    if data.get("data") is None:
-                        raise FetchError("No data found for the given mint")
+            data = await response.json()
+            if data.get("success") is False:
+                raise FetchError("API error: " + data.get("error", "Unknown error"))
+            if data.get("data") is None:
+                raise FetchError("No data found for the given mint")
 
-                    token_data = data["data"]["rows"][0]
-                    return LaunchLabCoin.model_validate(token_data)
-
-            except (aiohttp.ClientError, FetchError, asyncio.TimeoutError) as e:
-                LOGGER.error(
-                    "Failed to get LaunchLab Metadata (attempt %d): %s", attempts + 1, e
-                )
-                attempts += 1
-                await asyncio.sleep(5)
-    return None
+            token_data = data["data"]["rows"][0]
+            return LaunchLabCoin.model_validate(token_data)
 
 
+@retry(stop=stop_after_attempt(MAX_FETCH_RETRIES), wait=wait_fixed(5), reraise=True)
 async def fetch_token_stats(mint: str) -> Optional[TokenStats]:
     """Fetch token statistics from the LaunchLab API."""
-    attempts = 0
-    max_attempts = MAX_FETCH_RETRIES
     url = f"{JUPITER_API}?query={mint}"
 
     async with aiohttp.ClientSession() as session:
-        while attempts < max_attempts:
-            try:
-                async with session.get(url) as response:
-                    if response.status != 200:
-                        raise FetchError(f"HTTP error! Status: {response.status}")
+        async with session.get(url) as response:
+            if response.status != 200:
+                raise FetchError(f"HTTP error! Status: {response.status}")
 
-                    data = await response.json()
-                    if len(data) == 0:
-                        raise FetchError("No data found for the given mint")
-                    return TokenStats.model_validate(data[0])
+            data = await response.json()
+            if len(data) == 0:
+                raise FetchError("No data found for the given mint")
 
-            except (aiohttp.ClientError, FetchError, asyncio.TimeoutError) as e:
-                LOGGER.error(
-                    "Failed to get Token Stats (attempt %d): %s", attempts + 1, e
-                )
-                attempts += 1
-                await asyncio.sleep(5)
-    return None
+            return TokenStats.model_validate(data[0])
+
+
+@retry(stop=stop_after_attempt(MAX_FETCH_RETRIES), wait=wait_fixed(2), reraise=True)
+async def fetch_tweets(
+    query: str, search_type: Literal["latest", "popular", "top"], cursor: Optional[str]
+) -> Tuple[Optional[str], List[TweetData]]:
+    """Fetch tweets from Twitter API."""
+    url = f"{X_API_URL}/search.php"
+    headers = {
+        "x-rapidapi-key": RAPIDAPI_KEY,
+        "x-rapidapi-host": "twitter-api45.p.rapidapi.com",
+    }
+    params = {
+        "query": query,
+        "search_type": search_type,
+    }
+    if cursor:
+        params["cursor"] = cursor
+
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url, headers=headers, params=params) as response:
+            if response.status != 200:
+                raise FetchError(f"HTTP error! Status: {response.status}")
+
+            data = await response.json()
+            timeline = data.get("timeline") or []
+            tweets = [
+                TweetData.model_validate(tweet)
+                for tweet in timeline
+                if tweet.get("type", "") == "tweet"
+            ]
+            cursor = data.get("next_cursor", None)
+            return cursor, tweets
 
 
 def get_token_wallet(owner: Pubkey, mint: Pubkey) -> Pubkey:
@@ -316,3 +476,9 @@ def escape_markdown_v2(text: str) -> str:
 def format_currency(value: float) -> str:
     """Format a float into a currency string."""
     return f"{value:,.2f}"
+
+
+def utc_aware(dt: datetime) -> datetime:
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)

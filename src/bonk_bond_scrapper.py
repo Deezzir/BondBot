@@ -7,8 +7,13 @@ from aiogram import Bot
 from solders.pubkey import Pubkey
 from solders.transaction_status import EncodedConfirmedTransactionWithStatusMeta
 
-from bonds import Scrapper
-from constants import BONK_CONFIG_1, BONK_CONFIG_2, BONK_CONFIG_3, LAUNCHLAB_MIGRATION_ADDRESS
+from bond_scrapper import BondScrapper
+from constants import (
+    BONK_CONFIG_1,
+    BONK_CONFIG_2,
+    BONK_CONFIG_3,
+    LAUNCHLAB_MIGRATION_ADDRESS,
+)
 from utils import (
     TokenAssetData,
     calculate_fill_time,
@@ -20,8 +25,10 @@ from utils import (
 LOGGER: logging.Logger = logging.getLogger(__name__)
 
 
-class BonkBondScrapper(Scrapper):
+class BonkBondScrapper(BondScrapper):
     """Bond Scrapper class."""
+
+    name: str = "Bonk Bond Scrapper"
 
     def __init__(self, bot: Bot, chat_id: int, topic_id: Optional[int]) -> None:
         """Initialize Bonk Bond scrapper."""
@@ -52,7 +59,7 @@ class BonkBondScrapper(Scrapper):
             return False
 
         return any(
-            addr.pubkey in self.bonk_configs # type: ignore
+            addr.pubkey in self.bonk_configs  # type: ignore
             for addr in transaction_obj.message.account_keys
         )
 

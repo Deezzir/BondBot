@@ -7,7 +7,7 @@ from aiogram import Bot
 from solders.pubkey import Pubkey
 from solders.transaction_status import EncodedConfirmedTransactionWithStatusMeta
 
-from bonds import Scrapper
+from bond_scrapper import BondScrapper
 from constants import PUMP_MIGRATION_ADDRESS
 from utils import (
     TokenAssetData,
@@ -20,8 +20,10 @@ from utils import (
 LOGGER: logging.Logger = logging.getLogger(__name__)
 
 
-class PumpBondScrapper(Scrapper):
+class PumpBondScrapper(BondScrapper):
     """Bond Scrapper class."""
+
+    name: str = "Pump Bond Scrapper"
 
     def __init__(self, bot: Bot, chat_id: int, topic_id: Optional[int]) -> None:
         """Initialize Pump Bond scrapper."""

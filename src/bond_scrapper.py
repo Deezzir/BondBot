@@ -22,6 +22,7 @@ from solders.transaction_status import (
 )
 
 from constants import MAX_FETCH_RETRIES, RPC, SOL_MINT_ADDRESS
+from scrapper import Scrapper
 from utils import (
     Holder,
     HoldersInfo,
@@ -35,7 +36,7 @@ from utils import (
 LOGGER: logging.Logger = logging.getLogger(__name__)
 
 
-class Scrapper(ABC):
+class BondScrapper(Scrapper, ABC):
     """Base class for scrappers."""
 
     platform: str
@@ -43,37 +44,8 @@ class Scrapper(ABC):
 
     def __init__(self, bot: Bot, chat_id: int, topic_id: Optional[int]) -> None:
         """Initialize New Bond scrapper."""
+        super().__init__(bot, chat_id, topic_id)
         self.rpc = RPC
-        self.task: Optional[asyncio.Task[Any]] = None
-        self.bot = bot
-        self.chat_id = chat_id
-        self.topic_id = topic_id
-
-    async def start(self) -> None:
-        """Start the Bond Scrapper."""
-        if self.task:
-            return
-
-        task = asyncio.create_task(self._subscribe_bonds())
-        self.task = task
-        await task
-
-    async def stop(self) -> None:
-        """Stop the Bond Scrapper."""
-        if self.task:
-            self.task.cancel()
-
-            try:
-                await self.task
-            except asyncio.CancelledError:
-                pass
-            finally:
-                LOGGER.info("Bond Task was successfully cancelled.")
-                self.task = None
-        else:
-            if not self.chat_id:
-                return
-            # await self.bot.send_message(chat_id, "Bond Scrapper is not running.")
 
     def _compress_dev_link(self, dev: str) -> str:
         """Compress the dev wallet link."""
@@ -92,6 +64,7 @@ class Scrapper(ABC):
         raise NotImplementedError("This method should be implemented by subclasses.")
 
     async def _process_log(self, raw_tx: Any) -> Optional[Pubkey]:
+        """Process the log and return the mint address if found."""
         if not self.task:
             return None
 
@@ -120,7 +93,8 @@ class Scrapper(ABC):
         )
         return mint_balance.mint if mint_balance else None
 
-    async def _subscribe_bonds(self) -> None:
+    async def _task(self) -> None:
+        """Subscribe to bond logs and process them."""
         if not self.task:
             return
 
@@ -278,6 +252,7 @@ class Scrapper(ABC):
     async def _get_tx_details(
         self, sig: Signature
     ) -> Optional[EncodedConfirmedTransactionWithStatusMeta]:
+        """Get transaction details by signature."""
         if not self.task:
             return None
 
@@ -317,6 +292,7 @@ class Scrapper(ABC):
         mint: Pubkey,
         dev: Optional[Pubkey],
     ) -> Optional[HoldersInfo]:
+        """Get allocation info for the given mint."""
         if not self.task:
             return None
 
