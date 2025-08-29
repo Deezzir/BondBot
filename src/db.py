@@ -2,7 +2,7 @@
 
 from typing import Optional
 
-from pymongo import MongoClient, errors
+from pymongo import ASCENDING, MongoClient, errors
 from pymongo.collection import Collection
 from pymongo.database import Database
 
@@ -53,6 +53,7 @@ def _ensure_tweets_collection() -> Collection:
                 "post_retweets": {"bsonType": "int"},
                 "created_at": {"bsonType": "date"},
                 "media": {"bsonType": "array"},
+                "changes": {"bsonType": "object"},
             },
             "additionalProperties": True,
         }
@@ -89,3 +90,35 @@ def insert_tweet_if_not_exists(tweet: TweetData) -> bool:
         return True
     except errors.DuplicateKeyError:
         return False
+
+
+def get_tweets(
+    offset: int = 0, limit: int = 20, filter: Optional[dict] = None
+) -> list[TweetData]:
+    """Retrieve all tweets from the database.
+
+    Args:
+        offset (int): The number of tweets to skip. Defaults to 0.
+        limit (int): The maximum number of tweets to retrieve. Defaults to 20.
+
+    Returns:
+        list[TweetData]: A list of all tweets in the database.
+    """
+    coll = _ensure_tweets_collection()
+    tweets = coll.find(filter=filter, skip=offset, limit=limit).sort(
+        "created_at", ASCENDING
+    )
+    return [TweetData(**tweet) for tweet in tweets]
+
+
+def update_tweets(tweets: list[TweetData]) -> None:
+    """Update tweets in the database.
+
+    Args:
+        tweets (list[TweetData]): The list of tweets to update.
+    """
+    coll = _ensure_tweets_collection()
+    for tweet in tweets:
+        coll.update_one(
+            {"post_id": tweet.post_id}, {"$set": tweet.model_dump()}, upsert=False
+        )

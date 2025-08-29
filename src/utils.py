@@ -21,7 +21,15 @@ from aiogram.types import (
     ReplyKeyboardMarkup,
     ReplyKeyboardRemove,
 )
-from pydantic import BaseModel, Field, computed_field, field_validator
+from pydantic import (
+    AliasChoices,
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationError,
+    computed_field,
+    field_validator,
+)
 from solders.pubkey import Pubkey
 from tenacity import retry, stop_after_attempt, wait_fixed
 
@@ -156,11 +164,20 @@ class PumpCoin(BaseModel):
 class XUserInfo(BaseModel):
     """Data class to represent a user on X (Twitter)."""
 
+    model_config = ConfigDict(
+        populate_by_name=True,
+        extra="ignore",
+    )
+
     username: str = Field(..., alias="screen_name")
     user_id: str = Field(..., alias="rest_id")
-    user_followers: int = Field(..., alias="followers_count")
-    user_following: int = Field(..., alias="friends_count")
-    verified: bool = Field(..., alias="verified")
+    user_followers: int = Field(
+        ..., validation_alias=AliasChoices("followers_count", "sub_count")
+    )
+    user_following: int = Field(alias="friends_count", default=0)
+    verified: bool = Field(
+        ..., validation_alias=AliasChoices("verified", "blue_verified")
+    )
 
 
 class MediaLink(BaseModel):
@@ -173,15 +190,23 @@ class MediaLink(BaseModel):
 class TweetData(BaseModel):
     """Data class to represent a tweet."""
 
-    user: XUserInfo = Field(..., alias="user_info")
+    model_config = ConfigDict(
+        populate_by_name=True,
+        extra="ignore",
+    )
+
+    user: XUserInfo = Field(..., validation_alias=AliasChoices("user_info", "author"))
     post_views: int = Field(..., alias="views")
-    post_likes: int = Field(..., alias="favorites")
+    post_likes: int = Field(..., validation_alias=AliasChoices("favorites", "likes"))
     post_replies: int = Field(..., alias="replies")
     post_retweets: int = Field(..., alias="retweets")
     post_text: str = Field(..., alias="text")
-    post_id: str = Field(..., alias="tweet_id")
+    post_id: str = Field(
+        ..., validation_alias=AliasChoices("tweet_id", "conversation_id")
+    )
     created_at: datetime = Field(..., alias="created_at")
     media: List[MediaLink] = Field(default_factory=list, alias="media")
+    changes: dict = Field(default_factory=dict, alias="changes")
 
     @classmethod
     def _pick_video(cls, variants: Any) -> Optional[str]:
@@ -402,6 +427,35 @@ async def fetch_token_stats(mint: str) -> Optional[TokenStats]:
             return TokenStats.model_validate(data[0])
 
 
+@retry(stop=stop_after_attempt(2), wait=wait_fixed(1), reraise=True)
+async def fetch_tweet(tweet_id: str) -> Optional[TweetData]:
+    """Fetch a tweet info from Twitter API."""
+    url = f"{X_API_URL}/tweet.php"
+    headers = {
+        "x-rapidapi-key": RAPIDAPI_KEY,
+        "x-rapidapi-host": "twitter-api45.p.rapidapi.com",
+    }
+    params = {
+        "id": tweet_id,
+    }
+
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url, headers=headers, params=params) as response:
+            if response.status != 200:
+                raise FetchError(f"HTTP error! Status: {response.status}")
+
+            data = await response.json()
+            status = data.get("status")
+            if status in ["error", "protected", "suspended"]:
+                return None
+            try:
+                return TweetData.model_validate(data)
+            except ValidationError as e:
+                print(f"Post ID: {tweet_id}")
+                print(f"Data: {data}")
+                raise FetchError(f"Data validation error: {e}")
+
+
 @retry(stop=stop_after_attempt(MAX_FETCH_RETRIES), wait=wait_fixed(2), reraise=True)
 async def fetch_tweets(
     query: str, search_type: Literal["latest", "popular", "top"], cursor: Optional[str]
@@ -479,6 +533,7 @@ def format_currency(value: float) -> str:
 
 
 def utc_aware(dt: datetime) -> datetime:
+    """Ensure a datetime is timezone-aware in UTC."""
     if dt.tzinfo is None:
         return dt.replace(tzinfo=timezone.utc)
     return dt.astimezone(timezone.utc)
