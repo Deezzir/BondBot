@@ -26,7 +26,6 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
-    ValidationError,
     computed_field,
     field_validator,
 )
@@ -206,7 +205,7 @@ class TweetData(BaseModel):
     )
     created_at: datetime = Field(..., alias="created_at")
     media: List[MediaLink] = Field(default_factory=list, alias="media")
-    changes: dict = Field(default_factory=dict, alias="changes")
+    review: dict = Field(default_factory=dict, alias="review")
 
     @classmethod
     def _pick_video(cls, variants: Any) -> Optional[str]:
@@ -280,6 +279,7 @@ async def send_video(
     topic_id: Optional[int] = None,
 ) -> Message:
     """Send a video to a chat with a caption and a keyboard."""
+    caption = cap_media_caption(caption)
     return await bot.send_video(
         chat_id=chat_id,
         message_thread_id=topic_id,
@@ -305,6 +305,7 @@ async def send_photo(
     topic_id: Optional[int] = None,
 ) -> Optional[Message]:
     """Send a photo to a chat with a caption and a keyboard."""
+    caption = cap_media_caption(caption)
     return await bot.send_photo(
         chat_id=chat_id,
         message_thread_id=topic_id,
@@ -330,6 +331,7 @@ async def send_message(
     disable_web_page_preview: bool = False,
 ) -> Optional[Message]:
     """Send a message to a chat with a keyboard."""
+    text = cap_message_caption(text)
     return await bot.send_message(
         chat_id=chat_id,
         message_thread_id=topic_id,
@@ -371,6 +373,30 @@ def build_media_group(
                 )
             )
     return media_group
+
+
+@retry(stop=stop_after_attempt(MAX_FETCH_RETRIES), wait=wait_fixed(5), reraise=True)
+async def send_media_group(
+    bot: Bot,
+    chat_id: int,
+    caption: str,
+    media: List[MediaLink],
+    parse_mode: ParseMode = ParseMode.HTML,
+    topic_id: Optional[int] = None,
+) -> List[Message]:
+    """Send a media group to a chat."""
+    caption = cap_media_caption(caption)
+    media_group = build_media_group(
+        media=media,
+        caption=caption,
+        parse_mode=ParseMode.MARKDOWN_V2,
+        max_items=10,
+    )
+    return await bot.send_media_group(
+        chat_id=chat_id,
+        message_thread_id=topic_id,
+        media=media_group,
+    )
 
 
 @retry(stop=stop_after_attempt(MAX_FETCH_RETRIES), wait=wait_fixed(5), reraise=True)
@@ -448,12 +474,7 @@ async def fetch_tweet(tweet_id: str) -> Optional[TweetData]:
             status = data.get("status")
             if status in ["error", "protected", "suspended"]:
                 return None
-            try:
-                return TweetData.model_validate(data)
-            except ValidationError as e:
-                print(f"Post ID: {tweet_id}")
-                print(f"Data: {data}")
-                raise FetchError(f"Data validation error: {e}")
+            return TweetData.model_validate(data)
 
 
 @retry(stop=stop_after_attempt(MAX_FETCH_RETRIES), wait=wait_fixed(2), reraise=True)
@@ -537,3 +558,17 @@ def utc_aware(dt: datetime) -> datetime:
     if dt.tzinfo is None:
         return dt.replace(tzinfo=timezone.utc)
     return dt.astimezone(timezone.utc)
+
+
+def cap_media_caption(caption: str, max_length: int = 1024) -> str:
+    """Cap the vide caption to a maximum length."""
+    if len(caption) <= max_length:
+        return caption
+    return caption[: max_length - 3] + "..."
+
+
+def cap_message_caption(caption: str, max_length: int = 4096) -> str:
+    """Cap the message caption to a maximum length."""
+    if len(caption) <= max_length:
+        return caption
+    return caption[: max_length - 3] + "..."

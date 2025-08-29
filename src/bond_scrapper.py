@@ -179,6 +179,7 @@ class BondScrapper(Scrapper, ABC):
             f"\n*🏦 Top 20 Hodlers allocation:* {asset.top_holders_allocation}%\n"
         )
 
+        stats = ""
         if asset.stats and asset.stats.stats_24h:
             buy_volume = escape_markdown_v2(
                 format_currency(asset.stats.stats_24h.buy_volume)
@@ -198,7 +199,7 @@ class BondScrapper(Scrapper, ABC):
                 f"        • Traders: {asset.stats.stats_24h.num_traders}\n"
             )
 
-        payload += stats if asset.stats else ""
+        payload += stats
         payload += f"\n*⏰ Fill time: *{asset.fill_time}"
 
         if asset.twitter:
