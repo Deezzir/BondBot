@@ -252,14 +252,18 @@ class XScrapper(Scrapper):
 
                     views = latest.post_views
                     if views >= X_VIEWS_THRESHOLD_POST:
-                        LOGGER.info(
-                            "Found viral tweet: %s with %d views",
-                            latest.post_url,
-                            views,
-                        )
-                        await self._post_new_tweet(latest, topic_id=self.viral_topic_id)
-                        mark_tweet_posted(t.post_id)
-                        continue
+                        try:
+                            LOGGER.info(
+                                "Found viral tweet: %s with %d views",
+                                latest.post_url,
+                                views,
+                            )
+                            await self._post_new_tweet(latest, topic_id=self.viral_topic_id)
+                            mark_tweet_posted(t.post_id)
+                        except Exception as e:  # pylint: disable=broad-except
+                            LOGGER.error("Error posting viral tweet: %s", e)
+                        finally:
+                            continue
 
                     retries = 0
                     if t.review and isinstance(t.review.get("retries"), int):
