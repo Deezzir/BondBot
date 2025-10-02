@@ -80,3 +80,7 @@ PUMP_TOPIC_ID: Optional[int] = (
 BONK_TOPIC_ID: Optional[int] = (
     int(getenv("BONK_TOPIC_ID", "")) if getenv("BONK_TOPIC_ID", "").isdigit() else None
 )
+
+PUMP_SCRAPPER_ENABLED: bool = getenv("PUMP_SCRAPPER_ENABLED", "true").lower() == "true"
+BONK_SCRAPPER_ENABLED: bool = getenv("BONK_SCRAPPER_ENABLED", "true").lower() == "true"
+X_SCRAPPER_ENABLED: bool = getenv("X_SCRAPPER_ENABLED", "true").lower() == "true"

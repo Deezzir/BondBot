@@ -13,11 +13,14 @@ from aiogram.enums import ParseMode
 from bonk_bond_scrapper import BonkBondScrapper
 from constants import (
     BONK_GROUP_ID,
+    BONK_SCRAPPER_ENABLED,
     BONK_TOPIC_ID,
     BOT_TOKEN,
     PUMP_GROUP_ID,
+    PUMP_SCRAPPER_ENABLED,
     PUMP_TOPIC_ID,
     X_GROUP_ID,
+    X_SCRAPPER_ENABLED,
 )
 from pump_bond_scrapper import PumpBondScrapper
 from x_scrapper import XScrapper
@@ -36,9 +39,15 @@ X_SCRAPPER: XScrapper = XScrapper(bot=BOT, chat_id=X_GROUP_ID, topic_id=None)
 
 async def main() -> None:
     """Bot main."""
-    asyncio.create_task(PUMP_SCRAPPER.start())
-    asyncio.create_task(BONK_SCRAPPER.start())
-    asyncio.create_task(X_SCRAPPER.start())
+    if PUMP_SCRAPPER_ENABLED:
+        print("Pump scrapper enabled")
+        asyncio.create_task(PUMP_SCRAPPER.start())
+    if BONK_SCRAPPER_ENABLED:
+        print("Bonk scrapper enabled")
+        asyncio.create_task(BONK_SCRAPPER.start())
+    if X_SCRAPPER_ENABLED:
+        print("X scrapper enabled")
+        asyncio.create_task(X_SCRAPPER.start())
     await DISPATCHER.start_polling(BOT)
 
 

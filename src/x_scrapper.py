@@ -37,7 +37,6 @@ from db import (
 from scrapper import Scrapper
 from utils import (
     TweetData,
-    build_media_group,
     escape_markdown_v2,
     fetch_tweet,
     fetch_tweets,
@@ -258,7 +257,9 @@ class XScrapper(Scrapper):
                                 latest.post_url,
                                 views,
                             )
-                            await self._post_new_tweet(latest, topic_id=self.viral_topic_id)
+                            await self._post_new_tweet(
+                                latest, topic_id=self.viral_topic_id
+                            )
                             mark_tweet_posted(t.post_id)
                         except Exception as e:  # pylint: disable=broad-except
                             LOGGER.error("Error posting viral tweet: %s", e)
