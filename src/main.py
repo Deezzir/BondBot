@@ -12,6 +12,7 @@ from aiogram.enums import ParseMode
 
 from bonk_bond_scrapper import BonkBondScrapper
 from constants import (
+    BOND_SCRAPPER_FULL_STATS,
     BONK_GROUP_ID,
     BONK_SCRAPPER_ENABLED,
     BONK_TOPIC_ID,
@@ -29,10 +30,16 @@ from x_scrapper import XScrapper
 BOT: Bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 DISPATCHER: Dispatcher = Dispatcher()
 PUMP_SCRAPPER: PumpBondScrapper = PumpBondScrapper(
-    bot=BOT, chat_id=PUMP_GROUP_ID, topic_id=PUMP_TOPIC_ID
+    bot=BOT,
+    chat_id=PUMP_GROUP_ID,
+    topic_id=PUMP_TOPIC_ID,
+    full_stats=BOND_SCRAPPER_FULL_STATS,
 )
 BONK_SCRAPPER: BonkBondScrapper = BonkBondScrapper(
-    bot=BOT, chat_id=BONK_GROUP_ID, topic_id=BONK_TOPIC_ID
+    bot=BOT,
+    chat_id=BONK_GROUP_ID,
+    topic_id=BONK_TOPIC_ID,
+    full_stats=BOND_SCRAPPER_FULL_STATS,
 )
 X_SCRAPPER: XScrapper = XScrapper(bot=BOT, chat_id=X_GROUP_ID, topic_id=None)
 

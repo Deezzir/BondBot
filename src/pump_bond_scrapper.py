@@ -25,9 +25,11 @@ class PumpBondScrapper(BondScrapper):
 
     name: str = "Pump Bond Scrapper"
 
-    def __init__(self, bot: Bot, chat_id: int, topic_id: Optional[int]) -> None:
+    def __init__(
+        self, bot: Bot, chat_id: int, topic_id: Optional[int], full_stats: bool = False
+    ) -> None:
         """Initialize Pump Bond scrapper."""
-        super().__init__(bot, chat_id, topic_id)
+        super().__init__(bot, chat_id, topic_id, full_stats)
         self.platform = "💊 Pump Fun"
         self.migration_address = PUMP_MIGRATION_ADDRESS
 

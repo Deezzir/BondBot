@@ -46,12 +46,10 @@ X_API_URL = "https://twitter-api45.p.rapidapi.com"
 
 RPC: str = getenv("RPC", "")
 BOT_TOKEN: str = getenv("BOT_TOKEN", "")
-PUMP_GROUP_ID: int = int(getenv("PUMP_GROUP_ID", ""))
-BONK_GROUP_ID: int = int(getenv("BONK_GROUP_ID", ""))
-X_GROUP_ID: int = int(getenv("X_GROUP_ID", ""))
-X_NEW_GROUP_TOPIC_ID: int = int(getenv("X_NEW_GROUP_TOPIC_ID", ""))
-X_VIRAL_GROUP_TOPIC_ID: int = int(getenv("X_VIRAL_GROUP_TOPIC_ID", ""))
 RAPIDAPI_KEY: str = getenv("RAPIDAPI_KEY", "")
+MONGODB_URI: Optional[str] = getenv("MONGODB_URI", None)
+MONGODB_DB_NAME: str = getenv("MONGODB_DB_NAME", "bondbot")
+MONGODB_COLLECTION_NAME: str = getenv("MONGODB_COLLECTION_NAME", "tweets")
 
 X_SCRAPPER_FETCH_INTERVAL: int = 10  # 10 seconds
 X_REVIEW_FIRST_DELAY_SECONDS = 60 * 60  # 1 hour
@@ -70,10 +68,11 @@ X_SCRAPPER_MAX_FAVES: int = int(getenv("X_SCRAPPER_MAX_FAVES", "200"))
 X_FILTER_USER_MAX_FOLLOWERS: int = int(getenv("X_FILTER_USER_FOLLOWERS", "100000000"))
 X_FILTER_POST_MIN_VIEWS: int = int(getenv("X_FILTER_POST_VIEWS", "200"))
 
-MONGODB_URI: Optional[str] = getenv("MONGODB_URI", None)
-MONGODB_DB_NAME: str = getenv("MONGODB_DB_NAME", "bondbot")
-MONGODB_COLLECTION_NAME: str = getenv("MONGODB_COLLECTION_NAME", "tweets")
-
+PUMP_GROUP_ID: int = int(getenv("PUMP_GROUP_ID", ""))
+BONK_GROUP_ID: int = int(getenv("BONK_GROUP_ID", ""))
+X_GROUP_ID: int = int(getenv("X_GROUP_ID", ""))
+X_NEW_GROUP_TOPIC_ID: int = int(getenv("X_NEW_GROUP_TOPIC_ID", ""))
+X_VIRAL_GROUP_TOPIC_ID: int = int(getenv("X_VIRAL_GROUP_TOPIC_ID", ""))
 PUMP_TOPIC_ID: Optional[int] = (
     int(getenv("PUMP_TOPIC_ID", "")) if getenv("PUMP_TOPIC_ID", "").isdigit() else None
 )
@@ -82,5 +81,9 @@ BONK_TOPIC_ID: Optional[int] = (
 )
 
 PUMP_SCRAPPER_ENABLED: bool = getenv("PUMP_SCRAPPER_ENABLED", "true").lower() == "true"
-BONK_SCRAPPER_ENABLED: bool = getenv("BONK_SCRAPPER_ENABLED", "true").lower() == "true"
-X_SCRAPPER_ENABLED: bool = getenv("X_SCRAPPER_ENABLED", "true").lower() == "true"
+BONK_SCRAPPER_ENABLED: bool = getenv("BONK_SCRAPPER_ENABLED", "false").lower() == "true"
+X_SCRAPPER_ENABLED: bool = getenv("X_SCRAPPER_ENABLED", "false").lower() == "true"
+
+BOND_SCRAPPER_FULL_STATS: bool = (
+    getenv("BOND_SCRAPPER_FULL_STATS", "false").lower() == "true"
+)

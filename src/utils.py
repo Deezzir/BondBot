@@ -21,14 +21,7 @@ from aiogram.types import (
     ReplyKeyboardMarkup,
     ReplyKeyboardRemove,
 )
-from pydantic import (
-    AliasChoices,
-    BaseModel,
-    ConfigDict,
-    Field,
-    computed_field,
-    field_validator,
-)
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, computed_field, field_validator
 from solders.pubkey import Pubkey
 from tenacity import retry, stop_after_attempt, wait_fixed
 
@@ -143,21 +136,28 @@ class PumpCoin(BaseModel):
     description: Optional[str]
     image_uri: str
     metadata_uri: str
-    twitter: Optional[str]
-    telegram: Optional[str]
+    twitter: Optional[str] = None
+    telegram: Optional[str] = None
+    website: Optional[str] = None
     bonding_curve: str
     associated_bonding_curve: str
     creator: str
     created_timestamp: int
-    raydium_pool: Optional[str]
     complete: bool
     virtual_sol_reserves: float
     virtual_token_reserves: float
     total_supply: float
-    website: Optional[str]
     market_cap: float
-    market_id: Optional[str]
+    pool_address: Optional[str]
     usd_market_cap: float
+
+    @field_validator("twitter", "telegram", "website", mode="before")
+    @classmethod
+    def _empty_string_to_none(cls, v: Any) -> Optional[str]:
+        """Convert empty strings to None."""
+        if not isinstance(v, str):
+            return None
+        return None if v.strip() == "" else v
 
 
 class XUserInfo(BaseModel):
@@ -261,8 +261,8 @@ class TweetData(BaseModel):
 
         return out
 
-    @computed_field
     @property
+    @computed_field
     def post_url(self) -> str:
         """Generate the URL of the tweet."""
         return f"https://twitter.com/{self.user.username}/status/{self.post_id}"

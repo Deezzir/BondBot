@@ -9,7 +9,7 @@ from aiogram import Bot
 from aiogram.enums import ParseMode
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, URLInputFile
 from solana.rpc.async_api import AsyncClient
-from solana.rpc.types import Commitment
+from solana.rpc.commitment import Commitment
 from solana.rpc.websocket_api import connect as ws_connect
 from solders.pubkey import Pubkey
 from solders.rpc.config import RpcTransactionLogsFilterMentions
@@ -41,11 +41,18 @@ class BondScrapper(Scrapper, ABC):
 
     platform: str
     migration_address: Pubkey
+    full_stats: bool = False
 
-    def __init__(self, bot: Bot, chat_id: int, topic_id: Optional[int]) -> None:
+    def __init__(
+        self, bot: Bot, chat_id: int, topic_id: Optional[int], full_stats: bool = False
+    ) -> None:
         """Initialize New Bond scrapper."""
         super().__init__(bot, chat_id, topic_id)
         self.rpc = RPC
+        self.full_stats = full_stats
+        self._post_new_bond = (
+            self._post_new_bond_full if full_stats else self._post_new_bond_short
+        )
 
     def _compress_dev_link(self, dev: str) -> str:
         """Compress the dev wallet link."""
@@ -81,24 +88,31 @@ class BondScrapper(Scrapper, ABC):
 
         token_balances = tx.transaction.meta.post_token_balances  # type: ignore
         if not token_balances:
+            LOGGER.warning("No token balances found in transaction.")
             return None
         mint_balance = next(
             (
                 token_balance
                 for token_balance in token_balances
-                if token_balance.ui_token_amount.ui_amount is None
+                if (
+                    token_balance.ui_token_amount.ui_amount is None
+                    or token_balance.ui_token_amount.ui_amount == 0
+                )
                 and token_balance.mint != SOL_MINT_ADDRESS
             ),
             None,
         )
-        return mint_balance.mint if mint_balance else None
+        if not mint_balance:
+            LOGGER.warning("No mint balance found in transaction.")
+            return None
+        return mint_balance.mint
 
     async def _task(self) -> None:
         """Subscribe to bond logs and process them."""
         if not self.task:
             return
 
-        sub_id: int
+        sub_id: Optional[int] = None
         done = False
 
         while not done:
@@ -131,7 +145,7 @@ class BondScrapper(Scrapper, ABC):
                 except Exception as e:  # pylint: disable=broad-except
                     LOGGER.error("Error with the WebSocket connection: %s", e)
                 finally:
-                    if websocket.open and sub_id:
+                    if websocket.open and sub_id is not None:
                         await websocket.logs_unsubscribe(sub_id)
 
     def _find_instruction_by_program_id(
@@ -150,7 +164,64 @@ class BondScrapper(Scrapper, ABC):
                 return instruction
         return None
 
-    async def _post_new_bond(self, asset: TokenAssetData) -> None:
+    async def _post_new_bond_short(self, asset: TokenAssetData) -> None:
+        """Post a new bond to the chat with short info."""
+        if not self.task or not self.bot or not self.chat_id:
+            return
+
+        token_info = escape_markdown_v2(f"{asset.name} (${asset.symbol})")
+        payload = f"📛 *{token_info}*\n" f"📄 *CA:* `{asset.ca}`"
+
+        keyboard_buttons: List[List[InlineKeyboardButton]] = []
+        social_buttons: List[InlineKeyboardButton] = []
+
+        if asset.twitter:
+            social_buttons.append(
+                InlineKeyboardButton(
+                    text="🐤 Twitter",
+                    url=asset.twitter,
+                )
+            )
+        if asset.telegram:
+            social_buttons.append(
+                InlineKeyboardButton(
+                    text="📞 Telegram",
+                    url=asset.telegram,
+                )
+            )
+        if asset.website:
+            social_buttons.append(
+                InlineKeyboardButton(
+                    text="🌐 Website",
+                    url=asset.website,
+                )
+            )
+
+        if social_buttons:
+            keyboard_buttons.append(social_buttons)
+
+        keyboard_buttons.append(
+            [
+                InlineKeyboardButton(
+                    text="🦅 DEX Screener",
+                    url=asset.dex,
+                )
+            ]
+        )
+
+        keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_buttons)
+        image = URLInputFile(asset.img_url)
+        _ = await send_photo(
+            self.bot,
+            self.chat_id,
+            image,
+            payload,
+            keyboard,
+            parse_mode=ParseMode.MARKDOWN_V2,
+            topic_id=self.topic_id,
+        )
+
+    async def _post_new_bond_full(self, asset: TokenAssetData) -> None:
         """Post a new bond to the chat."""
         if not self.task or not self.bot or not self.chat_id:
             return

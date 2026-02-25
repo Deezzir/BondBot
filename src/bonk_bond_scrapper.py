@@ -8,12 +8,7 @@ from solders.pubkey import Pubkey
 from solders.transaction_status import EncodedConfirmedTransactionWithStatusMeta
 
 from bond_scrapper import BondScrapper
-from constants import (
-    BONK_CONFIG_1,
-    BONK_CONFIG_2,
-    BONK_CONFIG_3,
-    LAUNCHLAB_MIGRATION_ADDRESS,
-)
+from constants import BONK_CONFIG_1, BONK_CONFIG_2, BONK_CONFIG_3, LAUNCHLAB_MIGRATION_ADDRESS
 from utils import (
     TokenAssetData,
     calculate_fill_time,
@@ -30,9 +25,11 @@ class BonkBondScrapper(BondScrapper):
 
     name: str = "Bonk Bond Scrapper"
 
-    def __init__(self, bot: Bot, chat_id: int, topic_id: Optional[int]) -> None:
+    def __init__(
+        self, bot: Bot, chat_id: int, topic_id: Optional[int], full_stats: bool = False
+    ) -> None:
         """Initialize Bonk Bond scrapper."""
-        super().__init__(bot, chat_id, topic_id)
+        super().__init__(bot, chat_id, topic_id, full_stats)
         self.platform = "🔨 Bonk"
         self.migration_address = LAUNCHLAB_MIGRATION_ADDRESS
         self.bonk_configs = [BONK_CONFIG_1, BONK_CONFIG_2, BONK_CONFIG_3]
@@ -60,7 +57,7 @@ class BonkBondScrapper(BondScrapper):
 
         return any(
             addr.pubkey in self.bonk_configs  # type: ignore
-            for addr in transaction_obj.message.account_keys
+            for addr in transaction_obj.message.account_keys # type: ignore
         )
 
     async def _get_asset_info(self, mint: Pubkey) -> Optional[TokenAssetData]:

@@ -112,6 +112,7 @@ def get_tweets(
     Args:
         offset (int): The number of tweets to skip. Defaults to 0.
         limit (int): The maximum number of tweets to retrieve. Defaults to 20.
+        db_filter (Optional[dict]): Optional filter to apply to the query.
 
     Returns:
         list[TweetData]: A list of all tweets in the database.
