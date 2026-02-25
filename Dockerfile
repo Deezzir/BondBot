@@ -1,13 +1,12 @@
-# Use an official Python runtime as a parent image
 FROM python:3.12-slim
-# Set the working directory in the container to /app
+
 WORKDIR /app
 
-# Add the current directory contents into the container at /app
-ADD . /app
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
-# Install any needed packages specified in depends.txt
-RUN pip install -r requirements.txt
+COPY pyproject.toml uv.lock /app/
+RUN uv sync --frozen --no-dev --no-install-project
 
-# Run main.py when the container launches
-CMD ["python", "src/main.py"]
+COPY src /app/src
+
+CMD ["uv", "run", "python", "src/main.py"]

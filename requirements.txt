@@ -1,7 +1,0 @@
-aiogram
-asyncio
-python-dotenv
-solders
-solana
-tenacity
-pymongo
