@@ -57,7 +57,7 @@ class BonkBondScrapper(BondScrapper):
 
         return any(
             addr.pubkey in self.bonk_configs  # type: ignore
-            for addr in transaction_obj.message.account_keys # type: ignore
+            for addr in transaction_obj.message.account_keys  # type: ignore
         )
 
     async def _get_asset_info(self, mint: Pubkey) -> Optional[TokenAssetData]:
@@ -80,9 +80,7 @@ class BonkBondScrapper(BondScrapper):
             fill_time=fill_time,
             dev_alloc=alloc_info.dev_allocation if alloc_info else 0,
             top_holders=alloc_info.top_holders if alloc_info else [],
-            top_holders_allocation=(
-                alloc_info.top_holders_allocation if alloc_info else 0
-            ),
+            top_holders_allocation=(alloc_info.top_holders_allocation if alloc_info else 0),
             ca=asset.mint,
             name=asset.name,
             symbol=asset.symbol,

@@ -71,8 +71,16 @@ X_FILTER_POST_MIN_VIEWS: int = int(getenv("X_FILTER_POST_VIEWS", "200"))
 PUMP_GROUP_ID: int = int(getenv("PUMP_GROUP_ID", ""))
 BONK_GROUP_ID: int = int(getenv("BONK_GROUP_ID", ""))
 X_GROUP_ID: int = int(getenv("X_GROUP_ID", ""))
-X_NEW_GROUP_TOPIC_ID: int = int(getenv("X_NEW_GROUP_TOPIC_ID", ""))
-X_VIRAL_GROUP_TOPIC_ID: int = int(getenv("X_VIRAL_GROUP_TOPIC_ID", ""))
+X_NEW_GROUP_TOPIC_ID: Optional[int] = (
+    int(getenv("X_NEW_GROUP_TOPIC_ID", ""))
+    if getenv("X_NEW_GROUP_TOPIC_ID", "").isdigit()
+    else None
+)
+X_VIRAL_GROUP_TOPIC_ID: Optional[int] = (
+    int(getenv("X_VIRAL_GROUP_TOPIC_ID", ""))
+    if getenv("X_VIRAL_GROUP_TOPIC_ID", "").isdigit()
+    else None
+)
 PUMP_TOPIC_ID: Optional[int] = (
     int(getenv("PUMP_TOPIC_ID", "")) if getenv("PUMP_TOPIC_ID", "").isdigit() else None
 )
@@ -84,6 +92,4 @@ PUMP_SCRAPPER_ENABLED: bool = getenv("PUMP_SCRAPPER_ENABLED", "true").lower() ==
 BONK_SCRAPPER_ENABLED: bool = getenv("BONK_SCRAPPER_ENABLED", "false").lower() == "true"
 X_SCRAPPER_ENABLED: bool = getenv("X_SCRAPPER_ENABLED", "false").lower() == "true"
 
-BOND_SCRAPPER_FULL_STATS: bool = (
-    getenv("BOND_SCRAPPER_FULL_STATS", "false").lower() == "true"
-)
+BOND_SCRAPPER_FULL_STATS: bool = getenv("BOND_SCRAPPER_FULL_STATS", "false").lower() == "true"

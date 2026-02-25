@@ -57,9 +57,7 @@ def _ensure_tweets_collection() -> Collection:
                 "review": {
                     "bsonType": "object",
                     "properties": {
-                        "status": {
-                            "enum": ["queued", "recheck", "posted", "discarded"]
-                        },
+                        "status": {"enum": ["queued", "recheck", "posted", "discarded"]},
                         "next_check_at": {"bsonType": ["date", "null"]},
                         "retries": {"bsonType": "int"},
                     },
@@ -118,9 +116,7 @@ def get_tweets(
         list[TweetData]: A list of all tweets in the database.
     """
     coll = _ensure_tweets_collection()
-    tweets = coll.find(filter=db_filter, skip=offset, limit=limit).sort(
-        "created_at", ASCENDING
-    )
+    tweets = coll.find(filter=db_filter, skip=offset, limit=limit).sort("created_at", ASCENDING)
     return [TweetData(**tweet) for tweet in tweets]
 
 
@@ -132,9 +128,7 @@ def update_tweets(tweets: list[TweetData]) -> None:
     """
     coll = _ensure_tweets_collection()
     for tweet in tweets:
-        coll.update_one(
-            {"post_id": tweet.post_id}, {"$set": tweet.model_dump()}, upsert=False
-        )
+        coll.update_one({"post_id": tweet.post_id}, {"$set": tweet.model_dump()}, upsert=False)
 
 
 def queue_tweet_review(tweet: TweetData, delay_seconds: int) -> None:

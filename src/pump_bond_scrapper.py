@@ -69,9 +69,7 @@ class PumpBondScrapper(BondScrapper):
             fill_time=fill_time,
             dev_alloc=alloc_info.dev_allocation if alloc_info else 0,
             top_holders=alloc_info.top_holders if alloc_info else [],
-            top_holders_allocation=(
-                alloc_info.top_holders_allocation if alloc_info else 0
-            ),
+            top_holders_allocation=(alloc_info.top_holders_allocation if alloc_info else 0),
             ca=asset.mint,
             name=asset.name,
             symbol=asset.symbol,

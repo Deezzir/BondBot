@@ -170,13 +170,9 @@ class XUserInfo(BaseModel):
 
     username: str = Field(..., alias="screen_name")
     user_id: str = Field(..., alias="rest_id")
-    user_followers: int = Field(
-        ..., validation_alias=AliasChoices("followers_count", "sub_count")
-    )
+    user_followers: int = Field(..., validation_alias=AliasChoices("followers_count", "sub_count"))
     user_following: int = Field(alias="friends_count", default=0)
-    verified: bool = Field(
-        ..., validation_alias=AliasChoices("verified", "blue_verified")
-    )
+    verified: bool = Field(..., validation_alias=AliasChoices("verified", "blue_verified"))
 
 
 class MediaLink(BaseModel):
@@ -200,9 +196,7 @@ class TweetData(BaseModel):
     post_replies: int = Field(..., alias="replies")
     post_retweets: int = Field(..., alias="retweets")
     post_text: str = Field(..., alias="text")
-    post_id: str = Field(
-        ..., validation_alias=AliasChoices("tweet_id", "conversation_id")
-    )
+    post_id: str = Field(..., validation_alias=AliasChoices("tweet_id", "conversation_id"))
     created_at: datetime = Field(..., alias="created_at")
     media: List[MediaLink] = Field(default_factory=list, alias="media")
     review: dict = Field(default_factory=dict, alias="review")
@@ -229,9 +223,7 @@ class TweetData(BaseModel):
     def _parse_twitter_dt(cls, v: Any) -> datetime:
         if isinstance(v, datetime):
             return (
-                v.replace(tzinfo=timezone.utc)
-                if v.tzinfo is None
-                else v.astimezone(timezone.utc)
+                v.replace(tzinfo=timezone.utc) if v.tzinfo is None else v.astimezone(timezone.utc)
             )
         dt = datetime.strptime(str(v), "%a %b %d %H:%M:%S %z %Y")
         return dt.astimezone(timezone.utc)
@@ -297,9 +289,7 @@ async def send_photo(
     photo: Union[InputFile, str],
     caption: str,
     keyboard: Optional[
-        Union[
-            InlineKeyboardMarkup, ReplyKeyboardMarkup, ReplyKeyboardRemove, ForceReply
-        ]
+        Union[InlineKeyboardMarkup, ReplyKeyboardMarkup, ReplyKeyboardRemove, ForceReply]
     ] = None,
     parse_mode: ParseMode = ParseMode.HTML,
     topic_id: Optional[int] = None,
@@ -322,9 +312,7 @@ async def send_message(
     chat_id: int,
     text: str,
     keyboard: Optional[
-        Union[
-            InlineKeyboardMarkup, ReplyKeyboardMarkup, ReplyKeyboardRemove, ForceReply
-        ]
+        Union[InlineKeyboardMarkup, ReplyKeyboardMarkup, ReplyKeyboardRemove, ForceReply]
     ] = None,
     parse_mode: ParseMode = ParseMode.HTML,
     topic_id: Optional[int] = None,
@@ -526,20 +514,12 @@ def calculate_fill_time(timestamp: int) -> str:
 
     if time_difference_seconds >= 86400:
         time_difference_days = time_difference_seconds / 86400
-        return (
-            f"{int(time_difference_days)} days" if time_difference_days > 1 else "1 day"
-        )
+        return f"{int(time_difference_days)} days" if time_difference_days > 1 else "1 day"
     if time_difference_seconds >= 3600:
         time_difference_hours = int(time_difference_seconds / 3600)
-        return (
-            f"{time_difference_hours} hours" if time_difference_hours > 1 else "1 hour"
-        )
+        return f"{time_difference_hours} hours" if time_difference_hours > 1 else "1 hour"
     time_difference_minutes = time_difference_seconds / 60
-    return (
-        f"{int(time_difference_minutes)} minutes"
-        if time_difference_minutes > 1
-        else "1 minute"
-    )
+    return f"{int(time_difference_minutes)} minutes" if time_difference_minutes > 1 else "1 minute"
 
 
 def escape_markdown_v2(text: str) -> str:

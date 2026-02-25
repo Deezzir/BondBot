@@ -17,6 +17,8 @@ dev = [
     # Linting
     "ruff",
     "codespell",
+    "isort",
+    "black",
     # Static
     "pyright",
 ]
@@ -62,6 +64,17 @@ convention = "google"
 [tool.codespell]
 skip = "build,lib,venv,icon.svg,.tox,.git,.mypy_cache,.ruff_cache,.coverage"
 
+# LSPs and formatters
 [tool.pyright]
-extraPaths = ["src", "lib"]
-exclude = ["lib"]
+include = ["src"]
+
+[tool.black]
+line-length = 99
+target-version = ["py312"]
+
+# Ensures that isort will format code that aligns with black. Used to configure
+# potential editors that will have isort installed, for automatically re-ordering
+# imports on save.
+[tool.isort]
+profile = "black"
+line_length = 99

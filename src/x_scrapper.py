@@ -73,6 +73,11 @@ class XScrapper(Scrapper):
         """Initialize X Scrapper."""
         super().__init__(bot, chat_id, topic_id)
 
+        if X_NEW_GROUP_TOPIC_ID is None or X_VIRAL_GROUP_TOPIC_ID is None:
+            raise ValueError(
+                "Topic IDs for new and viral tweets must be set in environment variables."
+            )
+
         self.new_topic_id = X_NEW_GROUP_TOPIC_ID
         self.viral_topic_id = X_VIRAL_GROUP_TOPIC_ID
         self._review_task: Optional[asyncio.Task] = None
@@ -111,9 +116,7 @@ class XScrapper(Scrapper):
                     current_cursor = cursor
                 except Exception as e:  # pylint: disable=broad-except
                     LOGGER.error("Error fetching tweets: %s", e)
-            LOGGER.info(
-                "Waiting for %d seconds before next fetch", X_SCRAPPER_FETCH_INTERVAL
-            )
+            LOGGER.info("Waiting for %d seconds before next fetch", X_SCRAPPER_FETCH_INTERVAL)
             await asyncio.sleep(X_SCRAPPER_FETCH_INTERVAL)
 
     async def _filter_tweets(self, tweets: list[TweetData]) -> list[TweetData]:
@@ -155,9 +158,7 @@ class XScrapper(Scrapper):
         username = escape_markdown_v2(tweet.user.username)
         user_link = f"[{username}](https://x.com/{username})"
         tweet_date_for = tweet.created_at.strftime("%b %d, %y @ %I:%M %p")
-        tweet_date_for += (
-            f" ({int((time.time() - tweet.created_at.timestamp()) / 60)}m ago)"
-        )
+        tweet_date_for += f" ({int((time.time() - tweet.created_at.timestamp()) / 60)}m ago)"
         tweet_date_for = escape_markdown_v2(tweet_date_for)
         tweet_text = escape_markdown_v2(tweet.post_text)
         user_followers = escape_markdown_v2(f"({tweet.user.user_followers})")
@@ -243,9 +244,7 @@ class XScrapper(Scrapper):
                 for t in due:
                     latest = await fetch_tweet(t.post_id)
                     if not latest:
-                        LOGGER.info(
-                            "Tweet %s not found, marking as discarded.", t.post_id
-                        )
+                        LOGGER.info("Tweet %s not found, marking as discarded.", t.post_id)
                         mark_tweet_discarded(t.post_id)
                         continue
 
@@ -257,9 +256,7 @@ class XScrapper(Scrapper):
                                 latest.post_url,
                                 views,
                             )
-                            await self._post_new_tweet(
-                                latest, topic_id=self.viral_topic_id
-                            )
+                            await self._post_new_tweet(latest, topic_id=self.viral_topic_id)
                             mark_tweet_posted(t.post_id)
                         except Exception as e:  # pylint: disable=broad-except
                             LOGGER.error("Error posting viral tweet: %s", e)
@@ -276,13 +273,9 @@ class XScrapper(Scrapper):
                             latest.post_url,
                             views,
                         )
-                        mark_tweet_recheck(
-                            t.post_id, delay_seconds=X_REVIEW_SECOND_DELAY_SECONDS
-                        )
+                        mark_tweet_recheck(t.post_id, delay_seconds=X_REVIEW_SECOND_DELAY_SECONDS)
                     else:
-                        LOGGER.info(
-                            "Discarding tweet %s with %d views", latest.post_url, views
-                        )
+                        LOGGER.info("Discarding tweet %s with %d views", latest.post_url, views)
                         mark_tweet_discarded(t.post_id)
 
                 await asyncio.sleep(2)

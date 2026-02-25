@@ -50,9 +50,7 @@ class BondScrapper(Scrapper, ABC):
         super().__init__(bot, chat_id, topic_id)
         self.rpc = RPC
         self.full_stats = full_stats
-        self._post_new_bond = (
-            self._post_new_bond_full if full_stats else self._post_new_bond_short
-        )
+        self._post_new_bond = self._post_new_bond_full if full_stats else self._post_new_bond_short
 
     def _compress_dev_link(self, dev: str) -> str:
         """Compress the dev wallet link."""
@@ -84,7 +82,7 @@ class BondScrapper(Scrapper, ABC):
             LOGGER.info("Transaction is not a migration transaction.")
             return None
 
-        LOGGER.info("Found the initilize new pool tx: %s", raw_tx.signature)
+        LOGGER.info("Found the initialize new pool tx: %s", raw_tx.signature)
 
         token_balances = tx.transaction.meta.post_token_balances  # type: ignore
         if not token_balances:
@@ -170,7 +168,7 @@ class BondScrapper(Scrapper, ABC):
             return
 
         token_info = escape_markdown_v2(f"{asset.name} (${asset.symbol})")
-        payload = f"📛 *{token_info}*\n" f"📄 *CA:* `{asset.ca}`"
+        payload = f"📛 *{token_info}*\n📄 *CA:* `{asset.ca}`"
 
         keyboard_buttons: List[List[InlineKeyboardButton]] = []
         social_buttons: List[InlineKeyboardButton] = []
@@ -241,23 +239,15 @@ class BondScrapper(Scrapper, ABC):
             f"🏛 *Dev Hodls:* {asset.dev_alloc if asset.dev_alloc > 1 else '<1'}%\n\n"
             f"🐳 *Top Hodlers:* "
         )
-        allocation_strings = [
-            f"{holder.allocation}%" for holder in asset.top_holders[:5]
-        ]
+        allocation_strings = [f"{holder.allocation}%" for holder in asset.top_holders[:5]]
         result = escape_markdown_v2(" | ".join(allocation_strings))
         payload += result
-        payload += (
-            f"\n*🏦 Top 20 Hodlers allocation:* {asset.top_holders_allocation}%\n"
-        )
+        payload += f"\n*🏦 Top 20 Hodlers allocation:* {asset.top_holders_allocation}%\n"
 
         stats = ""
         if asset.stats and asset.stats.stats_24h:
-            buy_volume = escape_markdown_v2(
-                format_currency(asset.stats.stats_24h.buy_volume)
-            )
-            sell_volume = escape_markdown_v2(
-                format_currency(asset.stats.stats_24h.sell_volume)
-            )
+            buy_volume = escape_markdown_v2(format_currency(asset.stats.stats_24h.buy_volume))
+            sell_volume = escape_markdown_v2(format_currency(asset.stats.stats_24h.sell_volume))
 
             stats = (
                 f"\n*👥 Total Hodlers:* {asset.stats.holder_count}\n"
@@ -346,11 +336,7 @@ class BondScrapper(Scrapper, ABC):
                     LOGGER.warning("Failed to get transaction %s, retrying...", sig)
                     attempt += 1
                     await asyncio.sleep(0.5)
-                if (
-                    tx_raw.value
-                    and tx_raw.value.transaction
-                    and tx_raw.value.transaction.meta
-                ):
+                if tx_raw.value and tx_raw.value.transaction and tx_raw.value.transaction.meta:
                     return tx_raw.value
             except Exception as e:  # pylint: disable=broad-except
                 LOGGER.error("Error in _get_tx_details: %s", e)
@@ -373,12 +359,8 @@ class BondScrapper(Scrapper, ABC):
         async with AsyncClient(f"https://{self.rpc}") as client:
             while attempt < MAX_FETCH_RETRIES:
                 try:
-                    info = HoldersInfo(
-                        top_holders=[], dev_allocation=0, top_holders_allocation=0
-                    )
-                    total_supply = await client.get_token_supply(
-                        mint, Commitment("confirmed")
-                    )
+                    info = HoldersInfo(top_holders=[], dev_allocation=0, top_holders_allocation=0)
+                    total_supply = await client.get_token_supply(mint, Commitment("confirmed"))
                     holders_raw = await client.get_token_largest_accounts(
                         mint, Commitment("confirmed")
                     )

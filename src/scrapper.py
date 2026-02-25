@@ -42,9 +42,7 @@ class Scrapper(ABC):
             except asyncio.CancelledError:
                 pass
             finally:
-                LOGGER.info(
-                    "Scrapper Task was successfully cancelled for %s", self.name
-                )
+                LOGGER.info("Scrapper Task was successfully cancelled for %s", self.name)
                 self.task = None
         else:
             if not self.chat_id:

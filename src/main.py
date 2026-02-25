@@ -29,32 +29,32 @@ from x_scrapper import XScrapper
 # Globals
 BOT: Bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 DISPATCHER: Dispatcher = Dispatcher()
-PUMP_SCRAPPER: PumpBondScrapper = PumpBondScrapper(
-    bot=BOT,
-    chat_id=PUMP_GROUP_ID,
-    topic_id=PUMP_TOPIC_ID,
-    full_stats=BOND_SCRAPPER_FULL_STATS,
-)
-BONK_SCRAPPER: BonkBondScrapper = BonkBondScrapper(
-    bot=BOT,
-    chat_id=BONK_GROUP_ID,
-    topic_id=BONK_TOPIC_ID,
-    full_stats=BOND_SCRAPPER_FULL_STATS,
-)
-X_SCRAPPER: XScrapper = XScrapper(bot=BOT, chat_id=X_GROUP_ID, topic_id=None)
 
 
 async def main() -> None:
     """Bot main."""
     if PUMP_SCRAPPER_ENABLED:
         print("Pump scrapper enabled")
-        asyncio.create_task(PUMP_SCRAPPER.start())
+        pump_scrapper: PumpBondScrapper = PumpBondScrapper(
+            bot=BOT,
+            chat_id=PUMP_GROUP_ID,
+            topic_id=PUMP_TOPIC_ID,
+            full_stats=BOND_SCRAPPER_FULL_STATS,
+        )
+        asyncio.create_task(pump_scrapper.start())
     if BONK_SCRAPPER_ENABLED:
         print("Bonk scrapper enabled")
-        asyncio.create_task(BONK_SCRAPPER.start())
+        bonk_scrapper: BonkBondScrapper = BonkBondScrapper(
+            bot=BOT,
+            chat_id=BONK_GROUP_ID,
+            topic_id=BONK_TOPIC_ID,
+            full_stats=BOND_SCRAPPER_FULL_STATS,
+        )
+        asyncio.create_task(bonk_scrapper.start())
     if X_SCRAPPER_ENABLED:
+        x_scrapper: XScrapper = XScrapper(bot=BOT, chat_id=X_GROUP_ID, topic_id=None)
         print("X scrapper enabled")
-        asyncio.create_task(X_SCRAPPER.start())
+        asyncio.create_task(x_scrapper.start())
     await DISPATCHER.start_polling(BOT)
 
 
