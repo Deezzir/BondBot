@@ -110,14 +110,15 @@ class BondScrapper(Scrapper, ABC):
         if not self.task:
             return
 
-        sub_id: Optional[int] = None
         done = False
 
         while not done:
-            async with ws_connect(
-                f"wss://{self.rpc}", ping_interval=60, ping_timeout=120
-            ) as websocket:
-                try:
+            sub_id: Optional[int] = None
+            websocket: Any = None
+            try:
+                async with ws_connect(
+                    f"wss://{self.rpc}", ping_interval=60, ping_timeout=120
+                ) as websocket:
                     await websocket.logs_subscribe(
                         RpcTransactionLogsFilterMentions(self.migration_address),
                         Commitment("confirmed"),
@@ -136,15 +137,19 @@ class BondScrapper(Scrapper, ABC):
                                     await self._post_new_bond(asset_info)
                         except Exception as e:  # pylint: disable=broad-except
                             LOGGER.error("Error processing a log: %s", e)
-                except asyncio.CancelledError:
-                    LOGGER.info("The task was canceled. Cleaning up...")
-                    done = True
-                    break
-                except Exception as e:  # pylint: disable=broad-except
-                    LOGGER.error("Error with the WebSocket connection: %s", e)
-                finally:
-                    if websocket.open and sub_id is not None:
+            except asyncio.CancelledError:
+                LOGGER.info("The task was canceled. Cleaning up...")
+                done = True
+                break
+            except Exception as e:  # pylint: disable=broad-except
+                LOGGER.error("Error with the WebSocket connection: %s", e)
+                await asyncio.sleep(3)
+            finally:
+                try:
+                    if sub_id is not None and websocket is not None and websocket.open:
                         await websocket.logs_unsubscribe(sub_id)
+                except Exception as e:  # pylint: disable=broad-except
+                    LOGGER.warning("Failed to unsubscribe logs: %s", e)
 
     def _find_instruction_by_program_id(
         self, transaction: UiTransaction, target_program_id: Pubkey
